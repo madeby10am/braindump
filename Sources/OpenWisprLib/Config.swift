@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 public struct LanguageOption: Equatable, Sendable {
@@ -16,6 +17,36 @@ public struct Config: Codable {
     public var toggleMode: FlexBool?
     public var audioInputDeviceID: UInt32?
     public var audioInputDeviceUID: String?
+    public var formatter: FormatterConfig?
+    /// "system" (default), "light", or "dark".
+    public var appearance: String?
+    /// "hold", "toggle", or "auto". Older configs only have `toggleMode`.
+    public var hotkeyMode: String?
+
+    public enum HotkeyMode: String, CaseIterable {
+        case hold, toggle, auto
+    }
+
+    public static func modeLabel(_ mode: HotkeyMode) -> String {
+        switch mode {
+        case .hold: return "Hold to talk"
+        case .toggle: return "Toggle"
+        case .auto: return "Auto-stop"
+        }
+    }
+
+    /// Keeps the legacy `toggleMode` flag in sync for older builds.
+    public mutating func setHotkeyMode(_ mode: HotkeyMode) {
+        hotkeyMode = mode.rawValue
+        toggleMode = FlexBool(mode != .hold)
+    }
+
+    public var effectiveHotkeyMode: HotkeyMode {
+        if let m = hotkeyMode, let mode = HotkeyMode(rawValue: m) { return mode }
+        return (toggleMode?.value ?? false) ? .toggle : .hold
+    }
+
+    public var formatterSettings: FormatterConfig { formatter ?? FormatterConfig() }
 
     public var hotkey: HotkeyConfig {
         get { hotkeys[0] }
@@ -48,6 +79,9 @@ public struct Config: Codable {
         case toggleMode
         case audioInputDeviceID
         case audioInputDeviceUID
+        case formatter
+        case appearance
+        case hotkeyMode
     }
 
     public init(from decoder: Decoder) throws {
@@ -70,6 +104,9 @@ public struct Config: Codable {
         self.toggleMode = try c.decodeIfPresent(FlexBool.self, forKey: .toggleMode)
         self.audioInputDeviceID = try c.decodeIfPresent(UInt32.self, forKey: .audioInputDeviceID)
         self.audioInputDeviceUID = try c.decodeIfPresent(String.self, forKey: .audioInputDeviceUID)
+        self.formatter = try c.decodeIfPresent(FormatterConfig.self, forKey: .formatter)
+        self.appearance = try c.decodeIfPresent(String.self, forKey: .appearance)
+        self.hotkeyMode = try c.decodeIfPresent(String.self, forKey: .hotkeyMode)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -85,6 +122,9 @@ public struct Config: Codable {
         try c.encodeIfPresent(toggleMode, forKey: .toggleMode)
         try c.encodeIfPresent(audioInputDeviceID, forKey: .audioInputDeviceID)
         try c.encodeIfPresent(audioInputDeviceUID, forKey: .audioInputDeviceUID)
+        try c.encodeIfPresent(formatter, forKey: .formatter)
+        try c.encodeIfPresent(appearance, forKey: .appearance)
+        try c.encodeIfPresent(hotkeyMode, forKey: .hotkeyMode)
     }
 
     public init(
@@ -97,7 +137,8 @@ public struct Config: Codable {
         maxRecordings: Int?,
         toggleMode: FlexBool?,
         audioInputDeviceID: UInt32? = nil,
-        audioInputDeviceUID: String? = nil
+        audioInputDeviceUID: String? = nil,
+        formatter: FormatterConfig? = nil
     ) {
         self.hotkeys = hotkeys.isEmpty
             ? [HotkeyConfig(keyCode: 63, modifiers: [])]
@@ -111,6 +152,7 @@ public struct Config: Codable {
         self.toggleMode = toggleMode
         self.audioInputDeviceID = audioInputDeviceID
         self.audioInputDeviceUID = audioInputDeviceUID
+        self.formatter = formatter
     }
 
     public static let supportedLanguages: [LanguageOption] = [
@@ -259,6 +301,14 @@ public struct Config: Codable {
         maxRecordings: nil,
         toggleMode: FlexBool(false)
     )
+
+    public static func applyAppearance(_ value: String?) {
+        switch value {
+        case "light": NSApp?.appearance = NSAppearance(named: .aqua)
+        case "dark": NSApp?.appearance = NSAppearance(named: .darkAqua)
+        default: NSApp?.appearance = nil
+        }
+    }
 
     public static var configDir: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser

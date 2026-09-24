@@ -1,3 +1,36 @@
+# BrainDump
+
+**Talk messy. Paste clean.** A fork of [open-wispr](https://github.com/human37/open-wispr) that runs every dictation through a small local AI model before pasting, so rambling voice notes come out as clean text, structured prompts, emails, or Slack messages. Everything runs on your Mac: Whisper for speech, llama.cpp for formatting. No cloud, no API keys, free.
+
+<p align="center"><img src="Resources/brand/icon-1024.png" width="160" alt="BrainDump icon"></p>
+
+## What it adds to open-wispr
+
+- **AI formatting** with a local model through `llama-server` (Gemma 4 E2B "Fast" by default, Qwen3.5 4B "Polished"). If the model is slow or down, the raw transcript is pasted instead.
+- **Styles:** Clean Up, Claude Prompt, Email, Slack, and Custom (your own instructions).
+- **Settings window** with a live "Try it" box, a History tab (last 50 dictations, raw and formatted, stored locally), and a light/dark appearance switch.
+- **Hotkey picker** on a clickable keyboard, with Hold, Toggle, and Auto-stop (stops when you go quiet) modes.
+- Short dictations (under 15 words by default) skip the model and paste instantly.
+
+## Install
+
+```bash
+brew install whisper-cpp llama.cpp
+bash scripts/install-braindump.sh
+```
+
+Then grant Microphone and Accessibility to BrainDump. Models download to `~/.config/braindump/models` on first use. Test the formatter without the mic:
+
+```bash
+.build/release/open-wispr format --style claude "okay so um I need you to like check my email and uh add the dentist thing to my calendar"
+```
+
+Rolling back to open-wispr: `launchctl bootout gui/$UID ~/Library/LaunchAgents/com.madeby10am.braindump.plist && brew services start open-wispr`
+
+---
+
+*Original open-wispr README follows.*
+
 <p align="center">
   <img src="logo.svg" width="80" alt="open-wispr logo">
 </p>

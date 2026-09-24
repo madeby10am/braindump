@@ -12,6 +12,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private var sleepWakeObservers: [NSObjectProtocol] = []
     var isReady = false
     public var lastTranscription: String?
+    public var lastRawTranscription: String?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarController()
@@ -21,11 +22,24 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             self?.setup()
         }
+
+        // Launched by hand (not by the login agent): show the settings window.
+        let service = ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] ?? ""
+        if !service.contains("braindump") {
+            SettingsWindowController.shared.show()
+        }
+    }
+
+    /// Clicking BrainDump in Finder/Spotlight/Dock while it runs opens settings.
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        SettingsWindowController.shared.show()
+        return true
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
         recorder?.teardown()
         unregisterSleepWakeObservers()
+        Formatter.shared.stop()
     }
 
     private func setup() {
@@ -48,6 +62,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             RecordingStore.deleteAllRecordings()
         }
         transcriber = makeTranscriber(for: config)
+        Formatter.shared.start(settings: config.formatterSettings)
+        let appearance = config.appearance
+        DispatchQueue.main.async { Config.applyAppearance(appearance) }
 
         DispatchQueue.main.async {
             self.statusBar.reprocessHandler = { [weak self] url in
@@ -183,10 +200,15 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             legacyID: newConfig.audioInputDeviceID
         )
         config = newConfig
+        Config.applyAppearance(newConfig.appearance)
         recorder.preferredDeviceID = newDeviceID
         recorder.prepare()
         transcriber = makeTranscriber(for: config)
         inserter = TextInserter()
+        let formatterSettings = config.formatterSettings
+        DispatchQueue.global(qos: .utility).async {
+            Formatter.shared.start(settings: formatterSettings)
+        }
 
         for m in hotkeyManagers { m.stop() }
         hotkeyManagers = []
@@ -246,7 +268,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleKeyDown() {
         guard isReady else { return }
 
-        let isToggle = config.toggleMode?.value ?? false
+        let isToggle = config.effectiveHotkeyMode != .hold
 
         switch recordingLifecycle.keyDown(toggleMode: isToggle) {
         case .startRecording:
@@ -261,7 +283,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleKeyUp() {
         guard isReady else { return }
 
-        let isToggle = config.toggleMode?.value ?? false
+        let isToggle = config.effectiveHotkeyMode != .hold
 
         if recordingLifecycle.keyUp(toggleMode: isToggle) == .stopRecording {
             handleRecordingStop()
@@ -283,6 +305,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             try recorder.startRecording(to: outputURL)
             currentRecordingURL = outputURL
+            if config.effectiveHotkeyMode == .auto { startSilenceWatch() }
         } catch {
             print("Error: \(error.localizedDescription)")
             recordingLifecycle.recordingStartFailed()
@@ -291,7 +314,50 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Auto-stop
+
+    private var silenceTimer: Timer?
+
+    /// Auto-stop mode: once speech is heard, stop after ~1.8s of quiet.
+    /// Gives up after 10s if nothing is ever said. Samples an in-memory
+    /// level every 100ms; no I/O.
+    private func startSilenceWatch() {
+        silenceTimer?.invalidate()
+        let speechLevel: Float = 0.06
+        let quietLevel: Float = 0.03
+        let quietNeeded = 1.8
+        let started = Date()
+        var heardSpeech = false
+        var quietSince: Date?
+        let timer = Timer(timeInterval: 0.1, repeats: true) { [weak self] timer in
+            guard let self = self else { timer.invalidate(); return }
+            guard case .recording = self.statusBar.state else { timer.invalidate(); return }
+            let level = self.recorder.level
+            let now = Date()
+            if level >= speechLevel {
+                heardSpeech = true
+                quietSince = nil
+            } else if level < quietLevel {
+                if quietSince == nil { quietSince = now }
+            }
+            let quietFor = quietSince.map { now.timeIntervalSince($0) } ?? 0
+            let giveUp = !heardSpeech && now.timeIntervalSince(started) > 10
+            if (heardSpeech && quietFor >= quietNeeded) || giveUp {
+                timer.invalidate()
+                self.silenceTimer = nil
+                print(giveUp ? "Auto-stop: no speech heard, stopping" : "Auto-stop: silence detected")
+                if self.recordingLifecycle.autoStop() == .stopRecording {
+                    self.handleRecordingStop()
+                }
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        silenceTimer = timer
+    }
+
     private func handleRecordingStop() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
         guard let audioURL = recorder.stopRecording() else {
             RecordingCancellation.discardTrackedPartialRecording(&currentRecordingURL)
             statusBar.state = .idle
@@ -311,13 +377,25 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let raw = try self.transcriber.transcribe(audioURL: audioURL)
-                let text = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
+                let punctuated = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
+                let settings = self.config.formatterSettings
+                let formatted = Formatter.shared.formatWithInfo(punctuated, settings: settings)
+                let text = formatted.text
+                if !text.isEmpty {
+                    History.append(
+                        raw: punctuated, output: text,
+                        style: formatted.seconds != nil ? settings.formatStyle.name : nil,
+                        model: formatted.seconds != nil ? settings.preset.label : nil,
+                        seconds: formatted.seconds
+                    )
+                }
                 if maxRecordings > 0 {
                     RecordingStore.prune(maxCount: maxRecordings)
                 }
                 DispatchQueue.main.async {
                     if !text.isEmpty {
                         self.lastTranscription = text
+                        self.lastRawTranscription = punctuated
                         self.inserter.insert(text: text)
                     }
                     self.statusBar.state = .idle
@@ -405,10 +483,22 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             do {
                 let raw = try self.transcriber.transcribe(audioURL: audioURL)
-                let text = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
+                let punctuated = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
+                let settings = self.config.formatterSettings
+                let formatted = Formatter.shared.formatWithInfo(punctuated, settings: settings)
+                let text = formatted.text
+                if !text.isEmpty {
+                    History.append(
+                        raw: punctuated, output: text,
+                        style: formatted.seconds != nil ? settings.formatStyle.name : nil,
+                        model: formatted.seconds != nil ? settings.preset.label : nil,
+                        seconds: formatted.seconds
+                    )
+                }
                 DispatchQueue.main.async {
                     if !text.isEmpty {
                         self.lastTranscription = text
+                        self.lastRawTranscription = punctuated
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
                         self.statusBar.state = .copiedToClipboard

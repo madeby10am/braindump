@@ -20,7 +20,7 @@ enum AppBundleLaunch {
         let exec = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0]).resolvingSymlinksInPath()
         var dir = exec.deletingLastPathComponent()
         for _ in 0..<10 {
-            let candidate = dir.appendingPathComponent("OpenWispr.app", isDirectory: true)
+            let candidate = dir.appendingPathComponent("BrainDump.app", isDirectory: true)
             if FileManager.default.fileExists(atPath: candidate.path) {
                 return candidate
             }
@@ -30,9 +30,9 @@ enum AppBundleLaunch {
         }
 
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let homeApps = home.appendingPathComponent("Applications/OpenWispr.app", isDirectory: true)
+        let homeApps = home.appendingPathComponent("Applications/BrainDump.app", isDirectory: true)
         if FileManager.default.fileExists(atPath: homeApps.path) { return homeApps }
-        let system = URL(fileURLWithPath: "/Applications/OpenWispr.app", isDirectory: true)
+        let system = URL(fileURLWithPath: "/Applications/BrainDump.app", isDirectory: true)
         if FileManager.default.fileExists(atPath: system.path) { return system }
         return nil
     }
@@ -66,7 +66,7 @@ enum AppBundleLaunch {
         }
 
         let message = String(cString: strerror(execError))
-        fputs("Error: could not start OpenWispr.app: \(message)\n", stderr)
+        fputs("Error: could not start BrainDump.app: \(message)\n", stderr)
         return false
     }
 }

@@ -65,6 +65,11 @@ class AudioRecorder {
         }
     }
 
+    /// Current input peak level while recording, 0 otherwise.
+    var level: Float {
+        queue.sync { currentOutputURL == nil ? 0 : (capture?.currentLevel ?? 0) }
+    }
+
     func stopRecording() -> URL? {
         queue.sync {
             guard let url = currentOutputURL else { return nil }

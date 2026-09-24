@@ -19,6 +19,7 @@ func printUsage() {
         open-wispr set-language <code>  Set the language (e.g. en, fr, auto)
         open-wispr download-model [size]  Download a Whisper model
         open-wispr status             Show configuration and status
+        open-wispr format "<text>"    Run text through the AI formatter
         open-wispr --help             Show this help message
 
     HOTKEY EXAMPLES:
@@ -206,6 +207,35 @@ case "download-model":
     cmdDownloadModel(size)
 case "status":
     cmdStatus()
+case "render-settings":
+    _ = NSApplication.shared
+    NSApp.setActivationPolicy(.accessory)
+    SettingsWindowController.renderPNG(to: args.count > 2 ? args[2] : "settings.png", dark: args.contains("dark"),
+                                        tab: args.contains("history") ? .history : .formatting,
+                                        hotkeyPicker: args.contains("hotkey"))
+case "format":
+    // Runs text through the AI formatter exactly as dictation would
+    // (starts llama-server, formats, stops). Reads args or stdin.
+    var words = Array(args.dropFirst(2))
+    for flag in ["--model", "--style"] {
+        if let i = words.firstIndex(of: flag) { words.removeSubrange(i...min(i + 1, words.count - 1)) }
+    }
+    let input = !words.isEmpty
+        ? words.joined(separator: " ")
+        : (String(data: FileHandle.standardInput.readDataToEndOfFile(), encoding: .utf8) ?? "")
+    var settings = Config.load().formatterSettings
+    settings.enabled = FlexBool(true)
+    if let i = args.firstIndex(of: "--model"), i + 1 < args.count { settings.model = args[i + 1] }
+    if let i = args.firstIndex(of: "--style"), i + 1 < args.count { settings.style = args[i + 1] }
+    Formatter.shared.start(settings: settings)
+    let port = settings.port ?? FormatterConfig.defaultPort
+    for _ in 0..<120 {
+        if let url = URL(string: "http://127.0.0.1:\(port)/health"),
+           let data = try? Data(contentsOf: url), String(data: data, encoding: .utf8)?.contains("ok") == true { break }
+        Thread.sleep(forTimeInterval: 0.25)
+    }
+    print(Formatter.shared.format(input, settings: settings))
+    Formatter.shared.stop()
 case "--help", "-h", "help":
     printUsage()
 case nil:

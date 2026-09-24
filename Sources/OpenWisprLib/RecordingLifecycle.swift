@@ -32,6 +32,13 @@ struct RecordingLifecycle {
         return .stopRecording
     }
 
+    /// Auto-stop mode: silence ended the recording.
+    mutating func autoStop() -> Action {
+        guard isRecording else { return .none }
+        isRecording = false
+        return .stopRecording
+    }
+
     mutating func systemWillSleep() -> Action {
         guard isRecording else { return .none }
         isRecording = false

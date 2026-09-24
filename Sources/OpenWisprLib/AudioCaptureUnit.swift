@@ -147,7 +147,10 @@ final class AudioCaptureUnit {
         }
     }
 
+    var currentLevel: Float { renderState.peakLevel }
+
     func stop() throws {
+        renderState.peakLevel = 0
         guard let unit else { return }
         try Self.check(AudioOutputUnitStop(unit), "Stop microphone")
         let fileStatus = renderState.closeFile()
@@ -239,6 +242,9 @@ private final class AudioCaptureRenderState {
     var captureError: OSStatus = noErr
     var firstBufferAt: UInt64 = 0
     var requestedAt: UInt64 = 0
+    /// Peak sample level of the most recent buffer (0...1). Read from the
+    /// main thread for Auto-stop silence detection; a torn read is harmless.
+    var peakLevel: Float = 0
 
     func receive(_ flags: UnsafeMutablePointer<AudioUnitRenderActionFlags>, _ timestamp: UnsafePointer<AudioTimeStamp>,
                          _ frames: UInt32) -> OSStatus {
@@ -249,6 +255,14 @@ private final class AudioCaptureRenderState {
         buffer.frameLength = frames
         let status = AudioUnitRender(unit, flags, timestamp, 1, frames, buffer.mutableAudioBufferList)
         guard status == noErr else { captureError = status; return status }
+        if let samples = buffer.floatChannelData?[0] {
+            var peak: Float = 0
+            for i in 0..<Int(frames) {
+                let v = abs(samples[i])
+                if v > peak { peak = v }
+            }
+            peakLevel = peak
+        }
         guard let file else { return noErr }
         let writeStatus = ExtAudioFileWriteAsync(file, frames, buffer.audioBufferList)
         guard writeStatus == noErr else { captureError = writeStatus; return writeStatus }

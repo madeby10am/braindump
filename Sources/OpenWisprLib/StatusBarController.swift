@@ -46,9 +46,15 @@ class StatusBarController: NSObject {
         buildMenu()
     }
 
+    @objc private func copyLastRawTranscription() {
+        guard let text = (NSApplication.shared.delegate as? AppDelegate)?.lastRawTranscription ?? History.last?.raw else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
     @objc private func copyLastTranscription() {
         guard let delegate = NSApplication.shared.delegate as? AppDelegate,
-              let text = delegate.lastTranscription else { return }
+              let text = delegate.lastTranscription ?? History.last?.output else { return }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
@@ -90,9 +96,16 @@ class StatusBarController: NSObject {
 
         let menu = NSMenu()
 
-        let titleItem = NSMenuItem(title: "OpenWispr v\(OpenWispr.version)", action: nil, keyEquivalent: "")
+        let titleItem = NSMenuItem(title: "BrainDump v\(OpenWispr.version)", action: nil, keyEquivalent: "")
         titleItem.isEnabled = false
         menu.addItem(titleItem)
+
+        let settingsTarget = MenuItemTarget { SettingsWindowController.shared.show() }
+        menuItemTargets.append(settingsTarget)
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(MenuItemTarget.invoke), keyEquivalent: ",")
+        settingsItem.target = settingsTarget
+        settingsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
+        menu.addItem(settingsItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -270,27 +283,81 @@ class StatusBarController: NSObject {
 
         menu.addItem(NSMenuItem.separator())
 
-        let toggleTarget = MenuItemTarget { [weak self] in
+        let modeItem = NSMenuItem(title: "Hotkey Mode: \(Config.modeLabel(config.effectiveHotkeyMode))", action: nil, keyEquivalent: "")
+        let modeMenu = NSMenu()
+        for mode in Config.HotkeyMode.allCases {
+            let target = MenuItemTarget { [weak self] in
+                var cfg = Config.load()
+                cfg.setHotkeyMode(mode)
+                try? cfg.save()
+                self?.onConfigChange?(cfg)
+            }
+            menuItemTargets.append(target)
+            let item = NSMenuItem(title: Config.modeLabel(mode), action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
+            item.target = target
+            item.state = config.effectiveHotkeyMode == mode ? .on : .off
+            modeMenu.addItem(item)
+        }
+        modeItem.submenu = modeMenu
+        menu.addItem(modeItem)
+
+        let fmt = config.formatterSettings
+        let fmtTitle = fmt.isEnabled ? "AI Formatting: \(fmt.formatStyle.name) · \(fmt.preset.label)" : "AI Formatting: Off"
+        let fmtItem = NSMenuItem(title: fmtTitle, action: nil, keyEquivalent: "")
+        let fmtMenu = NSMenu()
+        let offTarget = MenuItemTarget { [weak self] in
             var cfg = Config.load()
-            let current = cfg.toggleMode?.value ?? false
-            cfg.toggleMode = FlexBool(!current)
+            var f = cfg.formatterSettings
+            f.enabled = FlexBool(false)
+            cfg.formatter = f
             try? cfg.save()
             self?.onConfigChange?(cfg)
         }
-        menuItemTargets.append(toggleTarget)
-        let toggleItem = NSMenuItem(title: "Toggle Mode", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-        toggleItem.target = toggleTarget
-        toggleItem.state = (config.toggleMode?.value ?? false) ? .on : .off
-        menu.addItem(toggleItem)
+        menuItemTargets.append(offTarget)
+        let offItem = NSMenuItem(title: "Off", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
+        offItem.target = offTarget
+        offItem.state = fmt.isEnabled ? .off : .on
+        fmtMenu.addItem(offItem)
+        for preset in FormatterConfig.models {
+            let target = MenuItemTarget { [weak self] in
+                var cfg = Config.load()
+                var f = cfg.formatterSettings
+                f.enabled = FlexBool(true)
+                f.model = preset.name
+                f.modelPath = nil
+                cfg.formatter = f
+                try? cfg.save()
+                self?.onConfigChange?(cfg)
+            }
+            menuItemTargets.append(target)
+            let item = NSMenuItem(title: preset.label, action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
+            item.target = target
+            item.state = (fmt.isEnabled && fmt.modelPath == nil && fmt.preset.name == preset.name) ? .on : .off
+            fmtMenu.addItem(item)
+        }
+        fmtItem.submenu = fmtMenu
+        menu.addItem(fmtItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        let lastText = (NSApplication.shared.delegate as? AppDelegate)?.lastTranscription
+        let lastText = (NSApplication.shared.delegate as? AppDelegate)?.lastTranscription ?? History.last?.output
         let copyTitle = copiedFeedback ? "Copied!" : "Copy Last Dictation"
         let copyItem = NSMenuItem(title: copyTitle, action: lastText != nil && !copiedFeedback ? #selector(copyLastTranscription) : nil, keyEquivalent: "c")
         copyItem.target = self
         if lastText == nil || copiedFeedback { copyItem.isEnabled = copiedFeedback }
         menu.addItem(copyItem)
+
+        let lastRaw = (NSApplication.shared.delegate as? AppDelegate)?.lastRawTranscription ?? History.last?.raw
+        let rawItem = NSMenuItem(title: "Copy Last Raw Dictation", action: lastRaw != nil ? #selector(copyLastRawTranscription) : nil, keyEquivalent: "C")
+        rawItem.target = self
+        rawItem.isEnabled = lastRaw != nil
+        menu.addItem(rawItem)
+
+        let historyTarget = MenuItemTarget { SettingsWindowController.shared.show(tab: .history) }
+        menuItemTargets.append(historyTarget)
+        let historyItem = NSMenuItem(title: "History…", action: #selector(MenuItemTarget.invoke), keyEquivalent: "h")
+        historyItem.target = historyTarget
+        menu.addItem(historyItem)
 
         if Config.effectiveMaxRecordings(config.maxRecordings) > 0 {
             let recordings = RecordingStore.listRecordings()
@@ -518,30 +585,13 @@ class StatusBarController: NSObject {
     // MARK: - Custom drawn icons
 
     static func drawLogo(active: Bool) -> NSImage {
-        let size = NSSize(width: 18, height: 18)
-        let image = NSImage(size: size, flipped: false) { rect in
-            NSColor.black.setFill()
-
-            let barWidth: CGFloat = 2.0
-            let gap: CGFloat = 2.5
-            let radius: CGFloat = 1.5
-            let centerX = rect.midX
-            let centerY = rect.midY
-
-            let heights: [CGFloat] = [4, 8, 12, 8, 4]
-            let totalWidth = CGFloat(heights.count) * barWidth + CGFloat(heights.count - 1) * gap
-            let startX = centerX - totalWidth / 2
-
-            for (i, height) in heights.enumerated() {
-                let x = startX + CGFloat(i) * (barWidth + gap)
-                let y = centerY - height / 2
-                let barRect = NSRect(x: x, y: y, width: barWidth, height: height)
-                NSBezierPath(roundedRect: barRect, xRadius: radius, yRadius: radius).fill()
-            }
-            return true
+        let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
+        if let brain = NSImage(systemSymbolName: "brain", accessibilityDescription: "BrainDump")?
+            .withSymbolConfiguration(config) {
+            brain.isTemplate = true
+            return brain
         }
-        image.isTemplate = true
-        return image
+        return NSImage(size: NSSize(width: 18, height: 18))
     }
 
     static func drawDownloadProgress(_ percent: Double, pulseAlpha: CGFloat = 1.0) -> NSImage {

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BINARY="${1:-.build/release/open-wispr}"
-APP_DIR="${2:-OpenWispr.app}"
+APP_DIR="${2:-BrainDump.app}"
 VERSION="${3:-0.3.0}"
 
 rm -rf "$APP_DIR"
@@ -23,11 +23,11 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
     <key>CFBundleExecutable</key>
     <string>open-wispr</string>
     <key>CFBundleIdentifier</key>
-    <string>com.human37.open-wispr</string>
+    <string>com.madeby10am.braindump</string>
     <key>CFBundleName</key>
-    <string>OpenWispr</string>
+    <string>BrainDump</string>
     <key>CFBundleDisplayName</key>
-    <string>OpenWispr</string>
+    <string>BrainDump</string>
     <key>CFBundleVersion</key>
     <string>${VERSION}</string>
     <key>CFBundleShortVersionString</key>
@@ -41,11 +41,17 @@ cat > "$APP_DIR/Contents/Info.plist" << PLIST
     <key>LSUIElement</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>OpenWispr needs microphone access to record speech for transcription.</string>
+    <string>BrainDump needs microphone access to record speech for transcription.</string>
 </dict>
 </plist>
 PLIST
 
-codesign --force --sign - --identifier com.human37.open-wispr "$APP_DIR"
+# A stable identity keeps macOS's Accessibility grant across rebuilds; ad-hoc
+# signing changes the signature every build, so macOS asks again each time.
+SIGN_ID="-"
+if security find-identity -p codesigning 2>/dev/null | grep -q "BrainDump Dev"; then
+    SIGN_ID="BrainDump Dev"
+fi
+codesign --force --sign "$SIGN_ID" --identifier com.madeby10am.braindump "$APP_DIR"
 
 echo "Built $APP_DIR"

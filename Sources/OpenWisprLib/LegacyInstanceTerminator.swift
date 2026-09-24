@@ -19,7 +19,7 @@ public struct LegacyInstanceTerminationResult: Equatable {
 public enum LegacyInstanceTerminator {
     public static func terminatePreviousInstances() -> LegacyInstanceTerminationResult {
         let applications: [any RunningApplicationInstance] = NSRunningApplication.runningApplications(
-            withBundleIdentifier: "com.human37.open-wispr"
+            withBundleIdentifier: "com.madeby10am.braindump"
         )
 
         return terminatePreviousInstances(
