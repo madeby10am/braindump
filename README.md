@@ -14,10 +14,16 @@
 
 ## Install
 
+Needs an Apple Silicon Mac, [Homebrew](https://brew.sh), and Apple's command-line tools (`xcode-select --install`). About 3 GB of disk for the models.
+
 ```bash
+git clone https://github.com/madeby10am/braindump.git ~/BrainDump
+cd ~/BrainDump
 brew install whisper-cpp llama.cpp
 bash scripts/install-braindump.sh
 ```
+
+If you already run open-wispr from Homebrew, the script stops it (without uninstalling it) so the two don't fight over the hotkey.
 
 Then grant Microphone and Accessibility to BrainDump. Models download to `~/.config/braindump/models` on first use. Test the formatter without the mic:
 
