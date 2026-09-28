@@ -281,6 +281,19 @@ class StatusBarController: NSObject {
         audioItem.submenu = audioSubmenu
         menu.addItem(audioItem)
 
+        let duckTarget = MenuItemTarget { [weak self] in
+            var cfg = Config.load()
+            cfg.voiceProcessing = FlexBool(!cfg.usesVoiceProcessing)
+            try? cfg.save()
+            self?.onConfigChange?(cfg)
+        }
+        menuItemTargets.append(duckTarget)
+        let duckItem = NSMenuItem(title: "Lower Other Audio While Recording", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
+        duckItem.target = duckTarget
+        duckItem.state = config.usesVoiceProcessing ? .on : .off
+        duckItem.toolTip = "Voice processing: less background noise, but music and other audio get quieter."
+        menu.addItem(duckItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let modeItem = NSMenuItem(title: "Hotkey Mode: \(Config.modeLabel(config.effectiveHotkeyMode))", action: nil, keyEquivalent: "")

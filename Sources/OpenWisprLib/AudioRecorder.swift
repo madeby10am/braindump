@@ -6,6 +6,14 @@ class AudioRecorder {
     private var capture: AudioCaptureUnit?
     private var currentOutputURL: URL?
     private var selectedDeviceID: AudioDeviceID?
+    private var wantsVoiceProcessing = false
+
+    /// macOS voice processing (noise suppression + echo cancellation). It also
+    /// ducks all other audio for as long as the unit exists, so it's opt-in.
+    var useVoiceProcessing: Bool {
+        get { queue.sync { wantsVoiceProcessing } }
+        set { queue.async { self.wantsVoiceProcessing = newValue } }
+    }
 
     var preferredDeviceID: AudioDeviceID? {
         get { queue.sync { selectedDeviceID } }
@@ -38,11 +46,11 @@ class AudioRecorder {
             outputDeviceID: AudioDeviceManager.getDefaultOutputDeviceID(),
             defaultInputDeviceID: defaultInput
         )
-        if let capture, capture.cacheState.canReuse(for: route) { return capture }
+        let voiceProcessing: Bool
+        if #available(macOS 14.0, *) { voiceProcessing = wantsVoiceProcessing } else { voiceProcessing = false }
+        if let capture, capture.voiceProcessing == voiceProcessing, capture.cacheState.canReuse(for: route) { return capture }
         capture = nil
         let startedAt = DispatchTime.now().uptimeNanoseconds
-        let voiceProcessing: Bool
-        if #available(macOS 14.0, *) { voiceProcessing = true } else { voiceProcessing = false }
         let configured = try AudioCaptureUnit(route: route, voiceProcessing: voiceProcessing)
         capture = configured
         print("Audio setup: \((DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000) ms; input=\(route.inputDeviceID), output=\(route.outputDeviceID)")

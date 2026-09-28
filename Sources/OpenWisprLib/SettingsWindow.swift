@@ -139,6 +139,7 @@ final class SettingsModel: ObservableObject {
     @Published var hotkeyMods: [String] = []
     @Published var hotkeyMode: Config.HotkeyMode = .hold
     @Published var showHotkeyPicker = false
+    @Published var voiceProcessing = false
 
     @Published var tryInput = "okay so um I need you to like check my email and then uh add the dentist thing to my calendar for friday and also like make me a grocery list eggs milk coffee you know"
     @Published var tryOutput = ""
@@ -194,6 +195,15 @@ final class SettingsModel: ObservableObject {
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.applyConfigChange(saved) }
     }
 
+    func setVoiceProcessing(_ on: Bool) {
+        var config = Config.load()
+        config.voiceProcessing = FlexBool(on)
+        try? config.save()
+        voiceProcessing = on
+        let saved = config
+        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.applyConfigChange(saved) }
+    }
+
     func setHotkeyMode(_ mode: Config.HotkeyMode) {
         var config = Config.load()
         config.setHotkeyMode(mode)
@@ -229,6 +239,7 @@ final class SettingsModel: ObservableObject {
         hotkeyCode = config.hotkey.keyCode
         hotkeyMods = config.hotkey.modifiers
         hotkeyMode = config.effectiveHotkeyMode
+        voiceProcessing = config.usesVoiceProcessing
         hotkey = MacKeyboard.describe(code: hotkeyCode, modifiers: hotkeyMods)
         appearance = config.appearance ?? "system"
         history = History.load()
@@ -449,13 +460,18 @@ struct SettingsView: View {
                     Label("Dark", systemImage: "moon").tag("dark")
                 }
                 .pickerStyle(.inline)
+                Divider()
+                Toggle("Lower other audio while recording", isOn: Binding(
+                    get: { model.voiceProcessing },
+                    set: { model.setVoiceProcessing($0) }
+                ))
             } label: {
-                Image(systemName: model.appearance == "light" ? "sun.max" : (model.appearance == "dark" ? "moon" : "circle.lefthalf.filled"))
+                Image(systemName: "gearshape")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .help("Appearance")
+            .help("Appearance and audio options")
         }
         .padding(.horizontal, 24)
         .padding(.top, 22)

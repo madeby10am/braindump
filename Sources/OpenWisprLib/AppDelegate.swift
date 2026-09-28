@@ -54,6 +54,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         config = Config.load()
         inserter = TextInserter()
         migrateAudioDeviceUIDIfNeeded()
+        recorder.useVoiceProcessing = config.usesVoiceProcessing
         recorder.preferredDeviceID = AudioDeviceManager.resolveConfiguredDeviceID(
             uid: config.audioInputDeviceUID,
             legacyID: config.audioInputDeviceID
@@ -201,6 +202,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         )
         config = newConfig
         Config.applyAppearance(newConfig.appearance)
+        recorder.useVoiceProcessing = newConfig.usesVoiceProcessing
         recorder.preferredDeviceID = newDeviceID
         recorder.prepare()
         transcriber = makeTranscriber(for: config)

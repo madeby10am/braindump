@@ -22,6 +22,10 @@ public struct Config: Codable {
     public var appearance: String?
     /// "hold", "toggle", or "auto". Older configs only have `toggleMode`.
     public var hotkeyMode: String?
+    /// Voice processing: cleaner audio, but turns down music while the mic
+    /// is active. Off unless set.
+    public var voiceProcessing: FlexBool?
+    public var usesVoiceProcessing: Bool { voiceProcessing?.value ?? false }
 
     public enum HotkeyMode: String, CaseIterable {
         case hold, toggle, auto
@@ -82,6 +86,7 @@ public struct Config: Codable {
         case formatter
         case appearance
         case hotkeyMode
+        case voiceProcessing
     }
 
     public init(from decoder: Decoder) throws {
@@ -107,6 +112,7 @@ public struct Config: Codable {
         self.formatter = try c.decodeIfPresent(FormatterConfig.self, forKey: .formatter)
         self.appearance = try c.decodeIfPresent(String.self, forKey: .appearance)
         self.hotkeyMode = try c.decodeIfPresent(String.self, forKey: .hotkeyMode)
+        self.voiceProcessing = try c.decodeIfPresent(FlexBool.self, forKey: .voiceProcessing)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -125,6 +131,7 @@ public struct Config: Codable {
         try c.encodeIfPresent(formatter, forKey: .formatter)
         try c.encodeIfPresent(appearance, forKey: .appearance)
         try c.encodeIfPresent(hotkeyMode, forKey: .hotkeyMode)
+        try c.encodeIfPresent(voiceProcessing, forKey: .voiceProcessing)
     }
 
     public init(
