@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>open-wispr — Free Voice Dictation for macOS (100% Local, No Cloud)</title>
+  <title>BrainDump — Talk Messy, Paste Clean (Local AI Dictation for macOS)</title>
   <meta name="description" content="The best free speech-to-text app for Mac. Hold a key, speak, release — text appears instantly. Powered by Whisper AI, runs 100% on-device. No cloud, no accounts, no subscription. Open source.">
   <meta name="keywords" content="voice dictation, speech to text, macOS, whisper, on-device, privacy, open source, Apple Silicon, voice typing, dictation app">
-  <meta name="author" content="human37">
+  <meta name="author" content="madeby10am">
   <link rel="canonical" href="https://open-wispr.com/">
 
   <meta property="og:type" content="website">
@@ -33,7 +33,7 @@
     "url": "https://open-wispr.com/",
     "downloadUrl": "https://open-wispr.com/#install",
     "softwareVersion": "0.30.0",
-    "author": { "@type": "Organization", "name": "human37" },
+    "author": { "@type": "Organization", "name": "madeby10am" },
     "license": "https://opensource.org/licenses/MIT"
   }
   </script>
@@ -590,14 +590,14 @@
           <rect x="26" y="-10" width="12" height="20" rx="4" fill="#fff"/>
         </g>
       </svg>
-      open-wispr
+      BrainDump
     </div>
     <div class="nav-right">
       <div class="nav-links" id="navLinks">
         <a href="#features">Features</a>
         <a href="#faq">FAQ</a>
         <a href="#install">Install</a>
-        <a href="https://github.com/human37/open-wispr">GitHub</a>
+        <a href="https://github.com/madeby10am/braindump">GitHub</a>
       </div>
       <button class="theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
@@ -628,14 +628,9 @@
       Install on Mac
     </div>
     <div class="install-body">
-      <code>curl -fsSL https://raw.githubusercontent.com/human37/open-wispr/main/scripts/install.sh | bash</code>
+      <code>git clone https://github.com/madeby10am/braindump.git ~/BrainDump &amp;&amp; cd ~/BrainDump &amp;&amp; brew install whisper-cpp llama.cpp &amp;&amp; bash scripts/install-braindump.sh</code>
       <button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.textContent.trim());this.textContent='COPIED';setTimeout(()=>this.textContent='COPY',2000)">COPY</button>
     </div>
-  </div>
-
-  <div class="tip-row">
-    <span>Free & open source forever.</span>
-    <a href="https://buy.stripe.com/4gM5kC2AU0Ssd4l6Hqd7q00">Leave a tip &rarr;</a>
   </div>
 </section>
 
@@ -777,7 +772,7 @@
   <div class="flow-steps">
     <div class="flow-step">
       <div class="flow-num">01</div>
-      <div class="flow-text"><strong>Paste the install command.</strong> It taps the Homebrew formula and installs the binary. Everything downloads behind a spinner.</div>
+      <div class="flow-text"><strong>Paste the install command.</strong> It needs an Apple Silicon Mac with Homebrew and Xcode command-line tools. It builds BrainDump and installs it to ~/Applications.</div>
     </div>
     <div class="flow-step">
       <div class="flow-num">02</div>
@@ -911,7 +906,7 @@
   <div class="faq-list">
     <details class="faq-item" open>
       <summary>Is open-wispr really free?</summary>
-      <p>Yes, completely free and open source under the MIT license. No subscriptions, no usage limits, no premium tier. You can <a href="https://buy.stripe.com/4gM5kC2AU0Ssd4l6Hqd7q00">leave a tip</a> if you want to support development.</p>
+      <p>Yes, completely free and open source under the MIT license. No subscriptions, no usage limits, no premium tier.</p>
     </details>
     <details class="faq-item">
       <summary>Does any audio or text leave my computer?</summary>
@@ -938,11 +933,10 @@
 </main>
 
 <footer>
-  <p>&copy; <script>document.write(new Date().getFullYear())</script> Ammon Taylor / MIT License</p>
+  <p>&copy; <script>document.write(new Date().getFullYear())</script> BrainDump (madeby10am). Based on open-wispr by Ammon Taylor, MIT License</p>
   <div class="footer-links">
-    <a href="https://github.com/human37/open-wispr">Source</a>
-    <a href="https://github.com/human37/open-wispr/issues">Issues</a>
-    <a href="https://buy.stripe.com/4gM5kC2AU0Ssd4l6Hqd7q00">Tip</a>
+    <a href="https://github.com/madeby10am/braindump">Source</a>
+    <a href="https://github.com/madeby10am/braindump/issues">Issues</a>
   </div>
 </footer>
 
