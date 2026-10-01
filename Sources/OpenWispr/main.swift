@@ -215,6 +215,18 @@ case "render-settings":
     SettingsWindowController.renderPNG(to: args.count > 2 ? args[2] : "settings.png", dark: args.contains("dark"),
                                         tab: args.contains("history") ? .history : .formatting,
                                         hotkeyPicker: args.contains("hotkey"))
+case "render-overlay":
+    _ = NSApplication.shared
+    NSApp.setActivationPolicy(.accessory)
+    SettingsWindowController.renderOverlayPNG(
+        to: args.count > 2 ? args[2] : "overlay.png", thinking: args.contains("thinking"), dark: args.contains("dark"),
+        level: args.contains("silent") ? 0 : (args.contains("loud") ? 0.9 : (args.contains("quiet") ? 0.2 : 0.5)),
+        time: args.compactMap(Double.init).first ?? 123.4)
+case "render-menu":
+    _ = NSApplication.shared
+    NSApp.setActivationPolicy(.accessory)
+    SettingsWindowController.renderMenuPNG(to: args.count > 2 ? args[2] : "menu.png", dark: args.contains("dark"),
+                                           expanding: ["hotkey", "speech", "dip"].first { args.contains($0) })
 case "format":
     // Runs text through the AI formatter exactly as dictation would
     // (starts llama-server, formats, stops). Reads args or stdin.

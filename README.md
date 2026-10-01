@@ -7,8 +7,12 @@
 ## What it adds to open-wispr
 
 - **AI formatting** with a local model through `llama-server` (Gemma 4 E2B "Fast" by default, Qwen3.5 4B "Polished"). If the model is slow or down, the raw transcript is pasted instead.
-- **Styles:** Clean Up, Claude Prompt, Email, Slack, and Custom (your own instructions).
-- **Settings window** with a live "Try it" box, a History tab (last 50 dictations, raw and formatted, stored locally), and a light/dark appearance switch.
+- **Styles:** Clean Up, Claude Prompt, Email, Slack, and Custom (your own instructions). Each is tuned on messy, rambling speech: questions stay questions, instructions are passed along rather than carried out, and the model's words are checked against yours. If a reply isn't a rewrite of what you said (a joke, a translation, an answer), BrainDump retries as Clean Up and finally falls back to your own words.
+- **Clean even with AI formatting off.** A rule-based pass fixes what Whisper leaves behind: missing periods between segments, stray capitals, "i", question marks, um/uh, and stuttered words. Fillers like "you know" and "I mean" are stripped before the model sees your text.
+- **Technical vocabulary.** Short dictations (under about 28 seconds) give Whisper a punctuation-and-spelling hint, and common developer terms (GitHub, VS Code, WordPress, n8n, Claude Code, API, JSON, npm...) are corrected afterward ("quad code" becomes "Claude Code"). Add your own with the `vocabulary` option.
+- **Menu-bar dropdown** (click the icon) with the hotkey keyboard, a three-size speech model picker (Tiny, Base, Small, each described in plain words), language, microphone, Music dipping, AI formatting and style, and quick Copy last dictation / Copy last raw dictation buttons.
+- **Recording overlay**: the brain icon appears on your screen (you pick the spot) while you talk, with electricity that follows your voice, then a glowing ring while it thinks. Turn it off or preview it in the menu-bar dropdown.
+- **Settings window** with a live "Try it" box, a History tab (last 50 dictations, raw and formatted, stored locally, plus the Copy last buttons), and a light/dark appearance switch.
 - **Hotkey picker** on a clickable keyboard, with Hold, Toggle, and Auto-stop (stops when you go quiet) modes.
 - Short dictations (under 15 words by default) skip the model and paste instantly.
 
@@ -65,7 +69,7 @@ A waveform icon appears in your menu bar when it's running.
 
 The default hotkey is the **Globe key** (🌐, bottom-left). Hold it, speak, release.
 
-BrainDump leaves other audio alone while you dictate. If you want background-noise reduction instead, turn on "Lower other audio while recording" in the settings gear menu; that lowers music and other playback while the mic is active.
+BrainDump leaves other audio alone while you dictate. If your mic picks up your music and causes echo or feedback, turn on **Music dipping** in the menu-bar dropdown (or the Music dipping button in Settings). It turns other sound down only while you are recording and back up the moment you stop, and the slider sets how far it dips: Light, Medium or Strong. Expect a brief extra pause when you start recording, because the audio is set up fresh each time.
 
 > **[Full installation guide](docs/install-guide.md)** — permissions walkthrough with screenshots, non-English macOS instructions, and troubleshooting.
 
@@ -87,7 +91,7 @@ Edit `~/.config/open-wispr/config.json`:
   "modelSize": "base.en",
   "language": "en",
   "spokenPunctuation": false,
-  "whisperPrompt": "Use punctuation and capitalization.",
+  "vocabulary": ["BrainDump", "Supabase"],
   "maxRecordings": 0,
   "toggleMode": false
 }
@@ -116,7 +120,8 @@ Both `hotkey` (single) and `hotkeys` (array) are supported. If both are present,
 | **modelSize** | `"base.en"` | See model table below |
 | **language** | `"en"` | `"auto"` for auto-detect, or any [ISO 639-1 code](https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes) — e.g. `it`, `fr`, `de`, `es` |
 | **spokenPunctuation** | `false` | Say "comma", "period", etc. to insert punctuation instead of auto-punctuation |
-| **whisperPrompt** | — | Optional prompt text passed to Whisper to guide style, vocabulary, or punctuation. Omit it or leave it blank to use Whisper's default behavior. |
+| **whisperPrompt** | built-in | Prompt text passed to Whisper to guide style, vocabulary, and punctuation. Leave it out to use the built-in hint (a punctuated sample plus your `vocabulary` and common developer terms). Used for recordings under about 28 seconds; longer ones decode without a prompt, because on long audio it made whisper.cpp drop words between its 30-second windows. |
+| **vocabulary** | `[]` | Extra words and names to spell correctly, such as `["JuiceFly", "Kubernetes"]`. They are matched case-insensitively and fixed in every dictation, and are also passed to Whisper as a hint. |
 | **maxRecordings** | `0` | Optionally store past recordings locally as `.wav` files for re-transcribing from the tray menu. `0` = nothing stored (default). Set 1-100 to keep that many recent recordings. |
 | **toggleMode** | `false` | Press hotkey once to start recording, press again to stop. Default is hold-to-talk. |
 
@@ -151,7 +156,7 @@ Click the waveform icon for status and options. **Recent Recordings** lists your
 | Downloading model | Progress ring |
 | Waiting for permission | Lock |
 
-Click the menu bar icon to access **Copy Last Dictation** — recovers your most recent transcription if you dictated without a text field focused.
+Click the menu bar icon (or open Settings → History) for **Copy last dictation** and **Copy last raw dictation**. They recover your most recent transcription if you dictated without a text field focused.
 
 ## Compare
 

@@ -1,11 +1,5 @@
 import AppKit
 
-class MenuItemTarget: NSObject {
-    let handler: () -> Void
-    init(handler: @escaping () -> Void) { self.handler = handler }
-    @objc func invoke() { handler() }
-}
-
 class StatusBarController: NSObject {
     private var statusItem: NSStatusItem
     private var animationTimer: Timer?
@@ -13,12 +7,12 @@ class StatusBarController: NSObject {
     private var animationFrames: [NSImage] = []
     private var downloadProgress: String?
     private var downloadPercent: Double = 0
-    private var copiedFeedback = false
-    private var menuItemTargets: [MenuItemTarget] = []
-    private var stateMenuItem: NSMenuItem?
+    private let status = MenuBarStatus()
+    private var panel: MenuBarPanelController?
 
     var reprocessHandler: ((URL) -> Void)?
-    var onConfigChange: ((Config) -> Void)?
+    /// Called on every state change, for the recording overlay.
+    var onStateChange: ((State) -> Void)?
 
     enum State {
         case idle
@@ -31,7 +25,11 @@ class StatusBarController: NSObject {
     }
 
     var state: State = .idle {
-        didSet { updateIcon() }
+        didSet {
+            updateIcon()
+            refresh()
+            onStateChange?(state)
+        }
     }
 
     override init() {
@@ -40,29 +38,24 @@ class StatusBarController: NSObject {
 
         if let button = statusItem.button {
             button.image = StatusBarController.drawLogo(active: false)
-            button.image?.isTemplate = true
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        buildMenu()
+        panel = MenuBarPanelController(model: SettingsModel.shared, status: status, actions: makeActions())
+        refresh()
+        openDropdownIfRequested()
     }
 
-    @objc private func copyLastRawTranscription() {
-        guard let text = (NSApplication.shared.delegate as? AppDelegate)?.lastRawTranscription ?? History.last?.raw else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
-
-    @objc private func copyLastTranscription() {
-        guard let delegate = NSApplication.shared.delegate as? AppDelegate,
-              let text = delegate.lastTranscription ?? History.last?.output else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
-        copiedFeedback = true
-        buildMenu()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            self?.copiedFeedback = false
-            self?.buildMenu()
+    /// Dev aid for screenshots: `BRAINDUMP_OPEN_MENU=1` (or `hotkey` / `speech`) opens the dropdown at launch.
+    private func openDropdownIfRequested() {
+        guard let value = ProcessInfo.processInfo.environment["BRAINDUMP_OPEN_MENU"], !value.isEmpty else { return }
+        let section: MenuSection? = ["hotkey": .hotkey, "speech": .speech][value]
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard let self, let button = self.statusItem.button else { return }
+            self.refreshRecordings()
+            self.panel?.show(below: button, expanded: section)
         }
     }
 
@@ -72,12 +65,30 @@ class StatusBarController: NSObject {
         if case .downloading = state {
             setIcon(StatusBarController.drawDownloadProgress(downloadPercent))
         }
-        if let text = text, let item = stateMenuItem {
-            let config = Config.load()
-            let hotkeyDesc = config.hotkeySummary()
-            item.title = "\(text) (hotkey: \(hotkeyDesc))"
-        } else {
-            buildMenu()
+        refresh()
+    }
+
+    // MARK: - Dropdown
+
+    /// Updates the dropdown's status line. Safe to call from any thread.
+    func refresh() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { self.refresh() }
+            return
+        }
+        if let progress = downloadProgress {
+            status.label = progress
+            status.kind = .working
+            return
+        }
+        switch state {
+        case .idle: (status.label, status.kind) = ("Ready", .ready)
+        case .recording: (status.label, status.kind) = ("Recording…", .recording)
+        case .transcribing: (status.label, status.kind) = ("Transcribing…", .working)
+        case .downloading: (status.label, status.kind) = ("Downloading model…", .working)
+        case .waitingForPermission: (status.label, status.kind) = ("Waiting for Accessibility permission…", .needsPermission)
+        case .copiedToClipboard: (status.label, status.kind) = ("Copied to clipboard", .ready)
+        case .error(let message): (status.label, status.kind) = ("Error: \(message)", .error)
         }
     }
 
@@ -88,343 +99,83 @@ class StatusBarController: NSObject {
         return f
     }()
 
-    func buildMenu() {
-        menuItemTargets = []
-
-        let config = Config.load()
-        let hotkeyDesc = config.hotkeySummary()
-
-        let menu = NSMenu()
-
-        let titleItem = NSMenuItem(title: "BrainDump v\(OpenWispr.version)", action: nil, keyEquivalent: "")
-        titleItem.isEnabled = false
-        menu.addItem(titleItem)
-
-        let settingsTarget = MenuItemTarget { SettingsWindowController.shared.show() }
-        menuItemTargets.append(settingsTarget)
-        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(MenuItemTarget.invoke), keyEquivalent: ",")
-        settingsItem.target = settingsTarget
-        settingsItem.image = NSImage(systemSymbolName: "slider.horizontal.3", accessibilityDescription: nil)
-        menu.addItem(settingsItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let stateLabel: String
-        if let progress = downloadProgress {
-            stateLabel = progress
-        } else {
-            switch state {
-            case .idle: stateLabel = "Ready"
-            case .recording: stateLabel = "Recording..."
-            case .transcribing: stateLabel = "Transcribing..."
-            case .downloading: stateLabel = "Downloading model..."
-            case .waitingForPermission: stateLabel = "Waiting for Accessibility permission..."
-            case .copiedToClipboard: stateLabel = "Copied to clipboard"
-            case .error(let message): stateLabel = "Error: \(message)"
-            }
+    private func refreshRecordings() {
+        guard Config.effectiveMaxRecordings(Config.load().maxRecordings) > 0 else {
+            status.recordings = []
+            return
         }
-        if case .waitingForPermission = state {
-            let target = MenuItemTarget {
+        status.recordings = RecordingStore.listRecordings().enumerated().map { index, recording in
+            MenuBarStatus.Recording(
+                url: recording.url,
+                label: "\(StatusBarController.displayDateFormatter.string(from: recording.date)) (\(index + 1))"
+            )
+        }
+    }
+
+    private func makeActions() -> MenuBarActions {
+        MenuBarActions(
+            openSettings: { [weak self] in
+                self?.panel?.hide(restoreFocus: false)
+                SettingsWindowController.shared.show()
+            },
+            openHistory: { [weak self] in
+                self?.panel?.hide(restoreFocus: false)
+                SettingsWindowController.shared.show(tab: .history)
+            },
+            grantAccessibility: { [weak self] in
+                self?.panel?.hide(restoreFocus: false)
                 Permissions.openAccessibilitySettings()
-            }
-            menuItemTargets.append(target)
-            let stateItem = NSMenuItem(title: "Grant Accessibility Permission...", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            stateItem.target = target
-            menu.addItem(stateItem)
-            stateMenuItem = stateItem
-        } else {
-            let stateItem = NSMenuItem(title: "\(stateLabel) (hotkey: \(hotkeyDesc))", action: nil, keyEquivalent: "")
-            stateItem.isEnabled = false
-            menu.addItem(stateItem)
-            stateMenuItem = stateItem
+            },
+            reprocess: { [weak self] url in
+                self?.panel?.hide()
+                self?.reprocessHandler?(url)
+            },
+            previewOverlay: { (NSApplication.shared.delegate as? AppDelegate)?.overlay.preview() },
+            reloadConfiguration: { [weak self] in
+                self?.panel?.hide()
+                (NSApplication.shared.delegate as? AppDelegate)?.reloadConfig()
+            },
+            openConfiguration: { [weak self] in
+                self?.panel?.hide()
+                StatusBarController.openConfigurationFile()
+            },
+            quit: { NSApplication.shared.terminate(nil) }
+        )
+    }
+
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        let event = NSApp.currentEvent
+        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+            showQuickMenu(from: sender)
+            return
         }
+        refreshRecordings()
+        panel?.toggle(below: sender)
+    }
 
-        menu.addItem(NSMenuItem.separator())
-
-        let currentLang = config.language
-        let langName = Config.supportedLanguages.first(where: { $0.code == currentLang })?.name ?? currentLang
-        let langItem = NSMenuItem(title: "Language: \(langName)", action: nil, keyEquivalent: "")
-        let langSubmenu = NSMenu()
-
-        for (index, lang) in Config.supportedLanguages.enumerated() {
-            if index == 1 {
-                langSubmenu.addItem(NSMenuItem.separator())
-            }
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                cfg.language = lang.code
-                if lang.code != "en" && cfg.modelSize.hasSuffix(".en") {
-                    let base = String(cfg.modelSize.dropLast(3))
-                    if Config.supportedModels.contains(base) {
-                        cfg.modelSize = base
-                    }
-                } else if lang.code == "en" && !cfg.modelSize.hasSuffix(".en") {
-                    let enVariant = cfg.modelSize + ".en"
-                    if Config.supportedModels.contains(enVariant) {
-                        cfg.modelSize = enVariant
-                    }
-                }
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            self.menuItemTargets.append(target)
-            let item = NSMenuItem(title: lang.name, action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            if lang.code == currentLang {
-                item.state = .on
-            }
-            langSubmenu.addItem(item)
-        }
-
-        langItem.submenu = langSubmenu
-        menu.addItem(langItem)
-
-        let modelItem = NSMenuItem(title: "Model: \(config.modelSize)", action: nil, keyEquivalent: "")
-        let modelSubmenu = NSMenu()
-
-        let englishModels = Config.supportedModels.filter { Config.isEnglishOnlyModel($0) }
-        let multilingualModels = Config.supportedModels.filter { !Config.isEnglishOnlyModel($0) }
-
-        let engHeader = NSMenuItem(title: "English", action: nil, keyEquivalent: "")
-        engHeader.isEnabled = false
-        modelSubmenu.addItem(engHeader)
-
-        for model in englishModels {
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                cfg.modelSize = model
-                if cfg.language != "en" {
-                    cfg.language = "en"
-                }
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            self.menuItemTargets.append(target)
-            let item = NSMenuItem(title: "  \(model)", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            if model == config.modelSize {
-                item.state = .on
-            }
-            modelSubmenu.addItem(item)
-        }
-
-        modelSubmenu.addItem(NSMenuItem.separator())
-
-        let multiHeader = NSMenuItem(title: "Multilingual", action: nil, keyEquivalent: "")
-        multiHeader.isEnabled = false
-        modelSubmenu.addItem(multiHeader)
-
-        for model in multilingualModels {
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                cfg.modelSize = model
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            self.menuItemTargets.append(target)
-            let item = NSMenuItem(title: "  \(model)", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            if model == config.modelSize {
-                item.state = .on
-            }
-            modelSubmenu.addItem(item)
-        }
-
-        modelItem.submenu = modelSubmenu
-        menu.addItem(modelItem)
-
-        let devices = AudioDeviceManager.listInputDevices()
-        let selectedDevice = devices.first(where: { device in
-            if let uid = config.audioInputDeviceUID { return device.uid == uid }
-            if let id = config.audioInputDeviceID { return device.id == id }
-            return false
-        })
-        let currentDeviceName = selectedDevice?.name ?? "System Default"
-        let audioItem = NSMenuItem(title: "Audio Input: \(currentDeviceName)", action: nil, keyEquivalent: "")
-        let audioSubmenu = NSMenu()
-        audioSubmenu.autoenablesItems = false
-
-        let defaultTarget = MenuItemTarget { [weak self] in
-            var cfg = Config.load()
-            cfg.audioInputDeviceID = nil
-            cfg.audioInputDeviceUID = nil
-            try? cfg.save()
-            self?.onConfigChange?(cfg)
-        }
-        menuItemTargets.append(defaultTarget)
-        let defaultItem = NSMenuItem(title: "System Default", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-        defaultItem.target = defaultTarget
-        if config.audioInputDeviceID == nil && config.audioInputDeviceUID == nil {
-            defaultItem.state = .on
-        }
-        audioSubmenu.addItem(defaultItem)
-
-        if !devices.isEmpty {
-            audioSubmenu.addItem(NSMenuItem.separator())
-        }
-
-        for device in devices {
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                cfg.audioInputDeviceID = device.id
-                cfg.audioInputDeviceUID = device.uid
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            menuItemTargets.append(target)
-            let item = NSMenuItem(title: device.name, action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            if selectedDevice?.id == device.id { item.state = .on }
-            audioSubmenu.addItem(item)
-        }
-
-        audioItem.submenu = audioSubmenu
-        menu.addItem(audioItem)
-
-        let duckTarget = MenuItemTarget { [weak self] in
-            var cfg = Config.load()
-            cfg.voiceProcessing = FlexBool(!cfg.usesVoiceProcessing)
-            try? cfg.save()
-            self?.onConfigChange?(cfg)
-        }
-        menuItemTargets.append(duckTarget)
-        let duckItem = NSMenuItem(title: "Lower Other Audio While Recording", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-        duckItem.target = duckTarget
-        duckItem.state = config.usesVoiceProcessing ? .on : .off
-        duckItem.toolTip = "Voice processing: less background noise, but music and other audio get quieter."
-        menu.addItem(duckItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let modeItem = NSMenuItem(title: "Hotkey Mode: \(Config.modeLabel(config.effectiveHotkeyMode))", action: nil, keyEquivalent: "")
-        let modeMenu = NSMenu()
-        for mode in Config.HotkeyMode.allCases {
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                cfg.setHotkeyMode(mode)
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            menuItemTargets.append(target)
-            let item = NSMenuItem(title: Config.modeLabel(mode), action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            item.state = config.effectiveHotkeyMode == mode ? .on : .off
-            modeMenu.addItem(item)
-        }
-        modeItem.submenu = modeMenu
-        menu.addItem(modeItem)
-
-        let fmt = config.formatterSettings
-        let fmtTitle = fmt.isEnabled ? "AI Formatting: \(fmt.formatStyle.name) · \(fmt.preset.label)" : "AI Formatting: Off"
-        let fmtItem = NSMenuItem(title: fmtTitle, action: nil, keyEquivalent: "")
-        let fmtMenu = NSMenu()
-        let offTarget = MenuItemTarget { [weak self] in
-            var cfg = Config.load()
-            var f = cfg.formatterSettings
-            f.enabled = FlexBool(false)
-            cfg.formatter = f
-            try? cfg.save()
-            self?.onConfigChange?(cfg)
-        }
-        menuItemTargets.append(offTarget)
-        let offItem = NSMenuItem(title: "Off", action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-        offItem.target = offTarget
-        offItem.state = fmt.isEnabled ? .off : .on
-        fmtMenu.addItem(offItem)
-        for preset in FormatterConfig.models {
-            let target = MenuItemTarget { [weak self] in
-                var cfg = Config.load()
-                var f = cfg.formatterSettings
-                f.enabled = FlexBool(true)
-                f.model = preset.name
-                f.modelPath = nil
-                cfg.formatter = f
-                try? cfg.save()
-                self?.onConfigChange?(cfg)
-            }
-            menuItemTargets.append(target)
-            let item = NSMenuItem(title: preset.label, action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-            item.target = target
-            item.state = (fmt.isEnabled && fmt.modelPath == nil && fmt.preset.name == preset.name) ? .on : .off
-            fmtMenu.addItem(item)
-        }
-        fmtItem.submenu = fmtMenu
-        menu.addItem(fmtItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        let lastText = (NSApplication.shared.delegate as? AppDelegate)?.lastTranscription ?? History.last?.output
-        let copyTitle = copiedFeedback ? "Copied!" : "Copy Last Dictation"
-        let copyItem = NSMenuItem(title: copyTitle, action: lastText != nil && !copiedFeedback ? #selector(copyLastTranscription) : nil, keyEquivalent: "c")
-        copyItem.target = self
-        if lastText == nil || copiedFeedback { copyItem.isEnabled = copiedFeedback }
-        menu.addItem(copyItem)
-
-        let lastRaw = (NSApplication.shared.delegate as? AppDelegate)?.lastRawTranscription ?? History.last?.raw
-        let rawItem = NSMenuItem(title: "Copy Last Raw Dictation", action: lastRaw != nil ? #selector(copyLastRawTranscription) : nil, keyEquivalent: "C")
-        rawItem.target = self
-        rawItem.isEnabled = lastRaw != nil
-        menu.addItem(rawItem)
-
-        let historyTarget = MenuItemTarget { SettingsWindowController.shared.show(tab: .history) }
-        menuItemTargets.append(historyTarget)
-        let historyItem = NSMenuItem(title: "History…", action: #selector(MenuItemTarget.invoke), keyEquivalent: "h")
-        historyItem.target = historyTarget
-        menu.addItem(historyItem)
-
-        if Config.effectiveMaxRecordings(config.maxRecordings) > 0 {
-            let recordings = RecordingStore.listRecordings()
-            let reprocessItem = NSMenuItem(title: "Recent Recordings", action: nil, keyEquivalent: "")
-            let submenu = NSMenu()
-
-            if recordings.isEmpty {
-                let emptyItem = NSMenuItem(title: "No recordings", action: nil, keyEquivalent: "")
-                emptyItem.isEnabled = false
-                submenu.addItem(emptyItem)
-            } else {
-                for (index, recording) in recordings.enumerated() {
-                    let dateStr = StatusBarController.displayDateFormatter.string(from: recording.date)
-                    let label = "\(dateStr) (\(index + 1))"
-                    let target = MenuItemTarget { [weak self] in
-                        self?.reprocessHandler?(recording.url)
-                    }
-                    menuItemTargets.append(target)
-                    let item = NSMenuItem(title: label, action: #selector(MenuItemTarget.invoke), keyEquivalent: "")
-                    item.target = target
-                    submenu.addItem(item)
-                }
-            }
-
-            reprocessItem.submenu = submenu
-            menu.addItem(reprocessItem)
-        }
-
-        menu.addItem(NSMenuItem.separator())
-
-        let reloadItem = NSMenuItem(title: "Reload Configuration", action: #selector(reloadConfiguration), keyEquivalent: "r")
-        reloadItem.target = self
-        menu.addItem(reloadItem)
-
-        let openItem = NSMenuItem(title: "Open Configuration", action: #selector(openConfiguration), keyEquivalent: "o")
-        openItem.target = self
-        menu.addItem(openItem)
-
+    /// Right-click: a plain menu with the two things you can always count on.
+    private func showQuickMenu(from button: NSStatusBarButton) {
+        panel?.hide(restoreFocus: false)
+        let menu = NSMenu()
+        let title = NSMenuItem(title: "BrainDump v\(OpenWispr.version)", action: nil, keyEquivalent: "")
+        title.isEnabled = false
+        menu.addItem(title)
+        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettingsFromQuickMenu), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
-
-        statusItem.menu = menu
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
     }
 
-    @objc private func reloadConfiguration() {
-        guard let delegate = NSApplication.shared.delegate as? AppDelegate else { return }
-        delegate.reloadConfig()
+    @objc private func openSettingsFromQuickMenu() {
+        SettingsWindowController.shared.show()
     }
 
-    @objc private func openConfiguration() {
+    private static func openConfigurationFile() {
         let configFile = Config.configFile
         if !FileManager.default.fileExists(atPath: configFile.path) {
-            let config = Config.defaultConfig
-            try? config.save()
+            try? Config.defaultConfig.save()
         }
         NSWorkspace.shared.open(configFile)
     }
@@ -588,23 +339,35 @@ class StatusBarController: NSObject {
 
     private func setIcon(_ image: NSImage) {
         DispatchQueue.main.async {
-            if let button = self.statusItem.button {
-                button.image = image
-                button.image?.isTemplate = true
-            }
+            // Each icon sets its own template flag; the idle brain is in color.
+            self.statusItem.button?.image = image
         }
     }
 
     // MARK: - Custom drawn icons
 
+    /// The menu-bar brain, filled with the app icon's violet, crimson and orange.
     static func drawLogo(active: Bool) -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
-        if let brain = NSImage(systemSymbolName: "brain", accessibilityDescription: "BrainDump")?
-            .withSymbolConfiguration(config) {
-            brain.isTemplate = true
-            return brain
+        guard let brain = NSImage(systemSymbolName: "brain", accessibilityDescription: "BrainDump")?
+            .withSymbolConfiguration(config) else {
+            return NSImage(size: NSSize(width: 18, height: 18))
         }
-        return NSImage(size: NSSize(width: 18, height: 18))
+        let gradient = NSGradient(colorsAndLocations:
+            (NSColor(srgbRed: 0.486, green: 0.227, blue: 0.929, alpha: 1), 0),   // #7C3AED
+            (NSColor(srgbRed: 0.859, green: 0.153, blue: 0.467, alpha: 1), 0.55), // #DB2777
+            (NSColor(srgbRed: 0.976, green: 0.451, blue: 0.086, alpha: 1), 1)     // #F97316
+        )
+        let image = NSImage(size: brain.size, flipped: false) { rect in
+            brain.draw(in: rect)
+            // Keep the gradient only where the brain was drawn.
+            NSGraphicsContext.current?.compositingOperation = .sourceIn
+            gradient?.draw(in: rect, angle: -45)
+            return true
+        }
+        image.isTemplate = false
+        image.accessibilityDescription = "BrainDump"
+        return image
     }
 
     static func drawDownloadProgress(_ percent: Double, pulseAlpha: CGFloat = 1.0) -> NSImage {

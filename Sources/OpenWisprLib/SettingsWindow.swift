@@ -22,11 +22,11 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     private func showOnMain() {
         installEditMenu()
+        let model = SettingsModel.shared
         if window == nil {
-            let model = SettingsModel()
             let hosting = NSHostingView(rootView: SettingsView(model: model))
             let w = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 860, height: 700),
+                contentRect: NSRect(x: 0, y: 0, width: 920, height: 700),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                 backing: .buffered,
                 defer: false
@@ -36,15 +36,16 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             w.titleVisibility = .hidden
             w.isMovableByWindowBackground = true
             w.contentView = hosting
-            w.minSize = NSSize(width: 760, height: 620)
+            w.minSize = NSSize(width: 900, height: 620)
             w.isReleasedWhenClosed = false
             w.delegate = self
             w.center()
             window = w
-            self.model = model
         } else {
-            model?.reload()
+            model.reload()
         }
+        self.model = model
+        model.startPolling()
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -66,7 +67,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
             size = NSSize(width: 640, height: 470)
         } else {
             hosting = NSHostingView(rootView: SettingsView(model: model))
-            size = NSSize(width: 860, height: 700)
+            size = NSSize(width: 920, height: 700)
         }
         hosting.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         let w = NSWindow(contentRect: NSRect(origin: .zero, size: size),
@@ -79,6 +80,18 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         guard let rep = hosting.bitmapImageRepForCachingDisplay(in: hosting.bounds) else { return }
         hosting.cacheDisplay(in: hosting.bounds, to: rep)
         try? rep.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+    }
+
+    /// Debug: draws one frame of the recording overlay offscreen.
+    /// `open-wispr render-overlay <path> [thinking] [dark] [quiet|loud] [time]`.
+    public static func renderOverlayPNG(to path: String, thinking: Bool, dark: Bool, level: Double, time: Double) {
+        RecordingOverlayController.renderPNG(to: path, thinking: thinking, dark: dark, level: level, time: time)
+    }
+
+    /// Debug: draws the menu-bar dropdown offscreen to a PNG.
+    /// `open-wispr render-menu <path> [dark] [hotkey|speech]`.
+    public static func renderMenuPNG(to path: String, dark: Bool, expanding section: String?) {
+        MenuBarPanelController.renderPNG(to: path, dark: dark, expanding: section)
     }
 
     public func windowWillClose(_ notification: Notification) {
@@ -120,6 +133,10 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 // MARK: - Model
 
 final class SettingsModel: ObservableObject {
+    /// One model behind both the Settings window and the menu-bar dropdown, so a
+    /// change in one shows up in the other and neither saves stale values.
+    static let shared = SettingsModel()
+
     enum ServerStatus: Equatable {
         case off, loading, downloading, ready, missing
     }
@@ -140,6 +157,16 @@ final class SettingsModel: ObservableObject {
     @Published var hotkeyMode: Config.HotkeyMode = .hold
     @Published var showHotkeyPicker = false
     @Published var voiceProcessing = false
+    @Published var dipLevel: DipLevel = .medium
+    @Published var showDipPanel = false
+    @Published var overlayEnabled = true
+    @Published var overlayPosition: OverlayPosition = .top
+    @Published var language = "en"
+    @Published var speechTier: SpeechTier? = .base
+    /// A model from the config file that isn't one of the three sizes.
+    @Published var customSpeechModel: String?
+    @Published var inputDevices: [AudioInputDevice] = []
+    @Published var inputDeviceID: UInt32?
 
     @Published var tryInput = "okay so um I need you to like check my email and then uh add the dentist thing to my calendar for friday and also like make me a grocery list eggs milk coffee you know"
     @Published var tryOutput = ""
@@ -195,13 +222,96 @@ final class SettingsModel: ObservableObject {
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.applyConfigChange(saved) }
     }
 
+    private func persist(_ config: Config) {
+        try? config.save()
+        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.applyConfigChange(config) }
+    }
+
     func setVoiceProcessing(_ on: Bool) {
         var config = Config.load()
         config.voiceProcessing = FlexBool(on)
-        try? config.save()
         voiceProcessing = on
-        let saved = config
-        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.applyConfigChange(saved) }
+        persist(config)
+    }
+
+    func setOverlayEnabled(_ on: Bool) {
+        var config = Config.load()
+        config.overlay = FlexBool(on)
+        overlayEnabled = on
+        persist(config)
+    }
+
+    /// Saves the spot, then flashes the overlay there so you can see it.
+    func setOverlayPosition(_ position: OverlayPosition) {
+        var config = Config.load()
+        config.overlayPosition = position.rawValue
+        overlayPosition = position
+        persist(config)
+        DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.overlay.preview(brief: true) }
+    }
+
+    func setDipLevel(_ level: DipLevel) {
+        guard level != dipLevel else { return }
+        var config = Config.load()
+        config.dipLevel = level.rawValue
+        dipLevel = level
+        persist(config)
+    }
+
+    func setSpeechTier(_ tier: SpeechTier) {
+        var config = Config.load()
+        config.modelSize = tier.modelName(language: config.language)
+        speechTier = tier
+        customSpeechModel = nil
+        persist(config)
+    }
+
+    /// Switching language also switches between the English-only and multilingual model.
+    func setLanguage(_ code: String) {
+        var config = Config.load()
+        config.language = code
+        config.modelSize = Config.modelSize(for: code, keeping: config.modelSize)
+        language = code
+        persist(config)
+    }
+
+    /// nil means the system default input.
+    func setInputDevice(_ id: UInt32?) {
+        var config = Config.load()
+        let device = inputDevices.first { $0.id == id }
+        config.audioInputDeviceID = device?.id
+        config.audioInputDeviceUID = device?.uid
+        inputDeviceID = device?.id
+        persist(config)
+    }
+
+    var selectedInputName: String {
+        inputDevices.first { $0.id == inputDeviceID }?.name ?? "System Default"
+    }
+
+    var languageName: String {
+        Config.supportedLanguages.first { $0.code == language }?.name ?? language
+    }
+
+    /// What the menu and Settings show for the speech model.
+    var speechModelSummary: String {
+        speechTier?.title ?? customSpeechModel ?? "Base"
+    }
+
+    // MARK: Last dictation
+
+    var lastOutput: String? { (NSApp.delegate as? AppDelegate)?.lastTranscription ?? history.first?.output }
+    var lastRaw: String? { (NSApp.delegate as? AppDelegate)?.lastRawTranscription ?? history.first?.raw }
+
+    static let copyLastID = "last-dictation"
+    static let copyLastRawID = "last-raw-dictation"
+
+    func copyLastDictation() {
+        if let text = lastOutput { copy(text, id: Self.copyLastID) }
+    }
+
+    func copyLastRawDictation() {
+        if let text = lastRaw { copy(text, id: Self.copyLastRawID) }
     }
 
     func setHotkeyMode(_ mode: Config.HotkeyMode) {
@@ -233,17 +343,30 @@ final class SettingsModel: ObservableObject {
         enabled = f.isEnabled
         modelName = f.preset.name
         styleID = f.formatStyle.id
-        customPrompt = f.prompt ?? ""
-        savedCustomPrompt = customPrompt
+        if !customDirty {
+            customPrompt = f.prompt ?? ""
+            savedCustomPrompt = customPrompt
+        }
         minWords = f.minWords ?? FormatterConfig.defaultMinWords
         hotkeyCode = config.hotkey.keyCode
         hotkeyMods = config.hotkey.modifiers
         hotkeyMode = config.effectiveHotkeyMode
         voiceProcessing = config.usesVoiceProcessing
+        dipLevel = config.effectiveDipLevel
+        overlayEnabled = config.usesOverlay
+        overlayPosition = config.effectiveOverlayPosition
+        language = config.language
+        speechTier = SpeechTier.tier(for: config.modelSize)
+        customSpeechModel = speechTier == nil ? config.modelSize : nil
+        inputDevices = AudioDeviceManager.listInputDevices()
+        inputDeviceID = inputDevices.first { device in
+            if let uid = config.audioInputDeviceUID { return device.uid == uid }
+            if let id = config.audioInputDeviceID { return device.id == id }
+            return false
+        }?.id
         hotkey = MacKeyboard.describe(code: hotkeyCode, modifiers: hotkeyMods)
         appearance = config.appearance ?? "system"
         history = History.load()
-        startPolling()
     }
 
     var style: FormatStyle { FormatStyle.named(styleID) }
@@ -404,7 +527,7 @@ struct SettingsView: View {
                 HistoryView(model: model)
             }
         }
-        .frame(minWidth: 760, minHeight: 620)
+        .frame(minWidth: 900, minHeight: 620)
         .background(Color(nsColor: .windowBackgroundColor))
         .tint(Theme.accent)
     }
@@ -433,17 +556,23 @@ struct SettingsView: View {
             .labelsHidden()
             .frame(width: 190)
             Spacer()
+            if DipLevel.isAvailable {
+                Button {
+                    model.showDipPanel.toggle()
+                } label: {
+                    HeaderChip(icon: model.voiceProcessing ? "speaker.wave.1.fill" : "speaker.wave.3.fill",
+                               text: model.voiceProcessing ? "Dipping: \(model.dipLevel.title)" : "Music dipping: Off")
+                }
+                .buttonStyle(.plain)
+                .help(DipLevel.explanation)
+                .popover(isPresented: $model.showDipPanel, arrowEdge: .bottom) {
+                    MusicDippingPanel(model: model)
+                }
+            }
             Button {
                 model.showHotkeyPicker.toggle()
             } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "keyboard")
-                    Text(model.hotkeySummary).font(.system(size: 12, weight: .semibold))
-                    Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
-                .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.stroke))
+                HeaderChip(icon: "keyboard", text: model.hotkey)
             }
             .buttonStyle(.plain)
             .help("Change hotkey")
@@ -461,17 +590,27 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.inline)
                 Divider()
-                Toggle("Lower other audio while recording", isOn: Binding(
-                    get: { model.voiceProcessing },
-                    set: { model.setVoiceProcessing($0) }
+                Toggle("Recording overlay", isOn: Binding(
+                    get: { model.overlayEnabled },
+                    set: { model.setOverlayEnabled($0) }
                 ))
+                Menu("Overlay position") {
+                    Picker("Overlay position", selection: Binding(
+                        get: { model.overlayPosition },
+                        set: { model.setOverlayPosition($0) }
+                    )) {
+                        ForEach(OverlayPosition.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                }
             } label: {
                 Image(systemName: "gearshape")
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .tint(.primary)
             .fixedSize()
-            .help("Appearance and audio options")
+            .help("Appearance and recording overlay")
         }
         .padding(.horizontal, 24)
         .padding(.top, 22)
@@ -546,7 +685,7 @@ struct SettingsView: View {
                      ? "Unsaved changes. Press ⌘S to save. \"Try it\" already uses what you've typed."
                      : "BrainDump always adds a guard so the model rewrites your words and never answers them.")
                     .font(.system(size: 11))
-                    .foregroundStyle(model.customDirty ? Theme.accent : .secondary)
+                    .foregroundStyle(model.customDirty ? Color.primary : .secondary)
             }
         }
     }
@@ -667,9 +806,10 @@ private struct HistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(alignment: .top) {
                 SectionTitle(title: "History", subtitle: "Your last \(History.maxEntries) dictations, raw and formatted. Stored only on this Mac.")
                 Spacer()
+                CopyLastButtons(model: model)
                 Button(role: .destructive) { confirmClear = true } label: {
                     Label("Clear", systemImage: "trash")
                 }
@@ -726,7 +866,7 @@ private struct HistoryRow: View {
                     .font(.system(size: 11, weight: .medium))
                     .padding(.horizontal, 8).padding(.vertical, 2)
                     .background(Capsule().fill(record.wasFormatted ? Theme.accent.opacity(0.12) : Color.primary.opacity(0.07)))
-                    .foregroundStyle(record.wasFormatted ? Theme.accent : .secondary)
+                    .foregroundStyle(record.wasFormatted ? Color.primary : .secondary)
                 Spacer()
                 copyButton("Copy", text: record.output, id: record.id.uuidString + "-out")
                 if record.wasFormatted {
@@ -763,6 +903,109 @@ private struct HistoryRow: View {
                 .font(.system(size: 11, weight: .medium))
         }
         .buttonStyle(.borderless)
+        .tint(.primary)
+    }
+}
+
+/// "Copy last dictation" and "Copy last raw dictation".
+struct CopyLastButtons: View {
+    @ObservedObject var model: SettingsModel
+    /// Stretch both buttons across the available width.
+    var expand = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            button("Copy last dictation", icon: "doc.on.doc", id: SettingsModel.copyLastID,
+                   enabled: model.lastOutput != nil, action: model.copyLastDictation)
+            button("Copy last raw dictation", icon: "text.quote", id: SettingsModel.copyLastRawID,
+                   enabled: model.lastRaw != nil, action: model.copyLastRawDictation)
+        }
+    }
+
+    private func button(_ title: String, icon: String, id: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        let copied = model.copiedID == id
+        return Button(action: action) {
+            Label(copied ? "Copied" : title, systemImage: copied ? "checkmark" : icon)
+                .font(.system(size: 12, weight: .medium))
+                .frame(maxWidth: expand ? .infinity : nil)
+        }
+        .disabled(!enabled)
+    }
+}
+
+private struct HeaderChip: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(text).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+            Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+        }
+        .fixedSize()
+        .padding(.horizontal, 10).padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.06)))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.stroke))
+    }
+}
+
+/// Three-step slider for how far music dips while recording.
+struct DipLevelSlider: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Slider(
+                value: Binding(
+                    get: { Double(model.dipLevel.index) },
+                    set: { model.setDipLevel(DipLevel(index: Int($0.rounded()))) }
+                ),
+                in: 0...Double(DipLevel.allCases.count - 1), step: 1
+            )
+            HStack {
+                ForEach(DipLevel.allCases) { level in
+                    Text(level.title)
+                        .font(.system(size: 10, weight: level == model.dipLevel ? .semibold : .regular))
+                        .foregroundStyle(level == model.dipLevel ? Color.primary : .secondary)
+                        .frame(maxWidth: .infinity, alignment: level == .light ? .leading : (level == .strong ? .trailing : .center))
+                }
+            }
+        }
+        .help("How much other sound dips while you record")
+    }
+}
+
+/// Settings-window popover for Music dipping: switch, explanation, level.
+private struct MusicDippingPanel: View {
+    @ObservedObject var model: SettingsModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label("Music dipping", systemImage: "speaker.wave.2.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Toggle("", isOn: Binding(
+                    get: { model.voiceProcessing },
+                    set: { model.setVoiceProcessing($0) }
+                ))
+                .toggleStyle(.switch)
+                .labelsHidden()
+            }
+            Text(DipLevel.explanation)
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            DipLevelSlider(model: model)
+                .disabled(!model.voiceProcessing)
+                .opacity(model.voiceProcessing ? 1 : 0.4)
+            Text("Off by default, so your music keeps playing at full volume.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(width: 320)
     }
 }
 

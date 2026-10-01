@@ -7,12 +7,20 @@ class AudioRecorder {
     private var currentOutputURL: URL?
     private var selectedDeviceID: AudioDeviceID?
     private var wantsVoiceProcessing = false
+    private var wantedDipLevel = DipLevel.medium
 
     /// macOS voice processing (noise suppression + echo cancellation). It also
-    /// ducks all other audio for as long as the unit exists, so it's opt-in.
+    /// ducks all other audio for as long as the unit exists, so it's opt-in
+    /// ("Music dipping") and the unit only lives while recording.
     var useVoiceProcessing: Bool {
         get { queue.sync { wantsVoiceProcessing } }
         set { queue.async { self.wantsVoiceProcessing = newValue } }
+    }
+
+    /// How far other audio dips while recording. Only applies with voice processing.
+    var dipLevel: DipLevel {
+        get { queue.sync { wantedDipLevel } }
+        set { queue.async { self.wantedDipLevel = newValue } }
     }
 
     var preferredDeviceID: AudioDeviceID? {
@@ -23,6 +31,12 @@ class AudioRecorder {
     func prepare() {
         queue.async {
             guard self.currentOutputURL == nil else { return }
+            // A voice-processing unit ducks music for as long as it exists, so
+            // it is created at record time and released right after, never kept warm.
+            if self.wantsVoiceProcessing {
+                self.capture = nil
+                return
+            }
             do {
                 _ = try self.configuredCapture()
             } catch {
@@ -48,10 +62,11 @@ class AudioRecorder {
         )
         let voiceProcessing: Bool
         if #available(macOS 14.0, *) { voiceProcessing = wantsVoiceProcessing } else { voiceProcessing = false }
-        if let capture, capture.voiceProcessing == voiceProcessing, capture.cacheState.canReuse(for: route) { return capture }
+        if let capture, capture.voiceProcessing == voiceProcessing, capture.dipLevel == wantedDipLevel,
+           capture.cacheState.canReuse(for: route) { return capture }
         capture = nil
         let startedAt = DispatchTime.now().uptimeNanoseconds
-        let configured = try AudioCaptureUnit(route: route, voiceProcessing: voiceProcessing)
+        let configured = try AudioCaptureUnit(route: route, voiceProcessing: voiceProcessing, dipLevel: wantedDipLevel)
         capture = configured
         print("Audio setup: \((DispatchTime.now().uptimeNanoseconds - startedAt) / 1_000_000) ms; input=\(route.inputDeviceID), output=\(route.outputDeviceID)")
         return configured
@@ -84,6 +99,7 @@ class AudioRecorder {
             currentOutputURL = nil
             do {
                 try capture?.stop()
+                if capture?.voiceProcessing == true { capture = nil }
                 return url
             } catch {
                 capture = nil

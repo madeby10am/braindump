@@ -12,6 +12,9 @@ public struct Config: Codable {
     public var modelSize: String
     public var language: String
     public var whisperPrompt: String?
+    /// Extra words and names to spell correctly (company names, products, people).
+    /// Added to the built-in developer terms in `Vocabulary`.
+    public var vocabulary: [String]?
     public var spokenPunctuation: FlexBool?
     public var maxRecordings: Int?
     public var toggleMode: FlexBool?
@@ -26,6 +29,15 @@ public struct Config: Codable {
     /// is active. Off unless set.
     public var voiceProcessing: FlexBool?
     public var usesVoiceProcessing: Bool { voiceProcessing?.value ?? false }
+    /// How far music is dipped while recording: "light", "medium" (default) or "strong".
+    /// Show the brain overlay at the top of the screen while dictating. On unless set.
+    public var overlay: FlexBool?
+    public var usesOverlay: Bool { overlay?.value ?? true }
+    /// Where the overlay appears: "top" (default), "center", "bottom-right", etc.
+    public var overlayPosition: String?
+    public var effectiveOverlayPosition: OverlayPosition { overlayPosition.flatMap(OverlayPosition.init(rawValue:)) ?? .top }
+    public var dipLevel: String?
+    public var effectiveDipLevel: DipLevel { dipLevel.flatMap(DipLevel.init(rawValue:)) ?? .medium }
 
     public enum HotkeyMode: String, CaseIterable {
         case hold, toggle, auto
@@ -51,6 +63,12 @@ public struct Config: Codable {
     }
 
     public var formatterSettings: FormatterConfig { formatter ?? FormatterConfig() }
+
+    /// The user's own Whisper prompt, or the built-in punctuation-and-vocabulary hint.
+    public static func effectiveWhisperPrompt(_ config: Config) -> String {
+        if let own = config.whisperPrompt, !own.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return own }
+        return Transcriber.defaultPrompt(vocabulary: config.vocabulary)
+    }
 
     public var hotkey: HotkeyConfig {
         get { hotkeys[0] }
@@ -78,6 +96,7 @@ public struct Config: Codable {
         case modelSize
         case language
         case whisperPrompt
+        case vocabulary
         case spokenPunctuation
         case maxRecordings
         case toggleMode
@@ -87,6 +106,9 @@ public struct Config: Codable {
         case appearance
         case hotkeyMode
         case voiceProcessing
+        case dipLevel
+        case overlay
+        case overlayPosition
     }
 
     public init(from decoder: Decoder) throws {
@@ -104,6 +126,7 @@ public struct Config: Codable {
         self.modelSize = try c.decode(String.self, forKey: .modelSize)
         self.language = try c.decode(String.self, forKey: .language)
         self.whisperPrompt = try c.decodeIfPresent(String.self, forKey: .whisperPrompt)
+        self.vocabulary = try c.decodeIfPresent([String].self, forKey: .vocabulary)
         self.spokenPunctuation = try c.decodeIfPresent(FlexBool.self, forKey: .spokenPunctuation)
         self.maxRecordings = try c.decodeIfPresent(Int.self, forKey: .maxRecordings)
         self.toggleMode = try c.decodeIfPresent(FlexBool.self, forKey: .toggleMode)
@@ -113,6 +136,9 @@ public struct Config: Codable {
         self.appearance = try c.decodeIfPresent(String.self, forKey: .appearance)
         self.hotkeyMode = try c.decodeIfPresent(String.self, forKey: .hotkeyMode)
         self.voiceProcessing = try c.decodeIfPresent(FlexBool.self, forKey: .voiceProcessing)
+        self.dipLevel = try c.decodeIfPresent(String.self, forKey: .dipLevel)
+        self.overlay = try c.decodeIfPresent(FlexBool.self, forKey: .overlay)
+        self.overlayPosition = try c.decodeIfPresent(String.self, forKey: .overlayPosition)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -123,6 +149,7 @@ public struct Config: Codable {
         try c.encode(modelSize, forKey: .modelSize)
         try c.encode(language, forKey: .language)
         try c.encodeIfPresent(whisperPrompt, forKey: .whisperPrompt)
+        try c.encodeIfPresent(vocabulary, forKey: .vocabulary)
         try c.encodeIfPresent(spokenPunctuation, forKey: .spokenPunctuation)
         try c.encodeIfPresent(maxRecordings, forKey: .maxRecordings)
         try c.encodeIfPresent(toggleMode, forKey: .toggleMode)
@@ -132,6 +159,9 @@ public struct Config: Codable {
         try c.encodeIfPresent(appearance, forKey: .appearance)
         try c.encodeIfPresent(hotkeyMode, forKey: .hotkeyMode)
         try c.encodeIfPresent(voiceProcessing, forKey: .voiceProcessing)
+        try c.encodeIfPresent(dipLevel, forKey: .dipLevel)
+        try c.encodeIfPresent(overlay, forKey: .overlay)
+        try c.encodeIfPresent(overlayPosition, forKey: .overlayPosition)
     }
 
     public init(

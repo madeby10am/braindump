@@ -75,19 +75,33 @@ enum MacKeyboard {
 
 struct HotkeyPickerView: View {
     @ObservedObject var model: SettingsModel
+    /// Smaller keys and tighter spacing, for the menu-bar dropdown.
+    var compact = false
     @State private var pendingMods: Set<String> = []
 
-    private let unit: CGFloat = 34
-    private let gap: CGFloat = 5
+    private var unit: CGFloat { compact ? 22 : 34 }
+    private var gap: CGFloat { compact ? 3 : 5 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: compact ? 10 : 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("How the hotkey works").font(.system(size: 13, weight: .semibold))
-                HStack(spacing: 8) {
-                    ForEach(Config.HotkeyMode.allCases, id: \.self) { mode in
-                        ModeCard(mode: mode, selected: model.hotkeyMode == mode) {
-                            model.setHotkeyMode(mode)
+                if compact {
+                    Picker("", selection: Binding(get: { model.hotkeyMode }, set: { model.setHotkeyMode($0) })) {
+                        ForEach(Config.HotkeyMode.allCases, id: \.self) { Text(Config.modeLabel($0)).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
+                    Text(model.hotkeyMode.explanation)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack(spacing: 8) {
+                        ForEach(Config.HotkeyMode.allCases, id: \.self) { mode in
+                            ModeCard(mode: mode, selected: model.hotkeyMode == mode) {
+                                model.setHotkeyMode(mode)
+                            }
                         }
                     }
                 }
@@ -116,7 +130,7 @@ struct HotkeyPickerView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    Text("then click a key. Modifier keys work on their own.")
+                    Text(compact ? "then click a key" : "then click a key. Modifier keys work on their own.")
                         .font(.system(size: 11)).foregroundStyle(.secondary)
                 }
                 VStack(alignment: .leading, spacing: gap) {
@@ -127,7 +141,8 @@ struct HotkeyPickerView: View {
                                     key: key,
                                     width: key.width * unit + (key.width - 1) * gap,
                                     height: unit,
-                                    selected: key.code == model.hotkeyCode
+                                    selected: key.code == model.hotkeyCode,
+                                    compact: compact
                                 ) {
                                     model.setHotkey(code: key.code, modifiers: key.isModifier ? [] : Array(pendingMods))
                                 }
@@ -135,7 +150,7 @@ struct HotkeyPickerView: View {
                         }
                     }
                 }
-                .padding(12)
+                .padding(compact ? 8 : 12)
                 .background(RoundedRectangle(cornerRadius: 14).fill(Color.primary.opacity(0.05)))
 
                 if let warning = model.hotkeyWarning {
@@ -145,8 +160,18 @@ struct HotkeyPickerView: View {
                 }
             }
         }
-        .padding(20)
+        .padding(compact ? 0 : 20)
         .onAppear { pendingMods = Set(model.hotkeyMods.map(MacKeyboard.normalized)) }
+    }
+}
+
+extension Config.HotkeyMode {
+    var explanation: String {
+        switch self {
+        case .hold: return "Hold the key while you talk, let go to paste."
+        case .toggle: return "Tap to start, tap again to stop."
+        case .auto: return "Tap once and talk. Stops when you go quiet."
+        }
     }
 }
 
@@ -163,14 +188,6 @@ private struct ModeCard: View {
         }
     }
 
-    private var detail: String {
-        switch mode {
-        case .hold: return "Hold the key while you talk, let go to paste."
-        case .toggle: return "Tap to start, tap again to stop."
-        case .auto: return "Tap once and talk. Stops when you go quiet."
-        }
-    }
-
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
@@ -178,7 +195,7 @@ private struct ModeCard: View {
                     Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
                     Text(Config.modeLabel(mode)).font(.system(size: 12, weight: .semibold))
                 }
-                Text(detail)
+                Text(mode.explanation)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -199,13 +216,20 @@ private struct KeyCap: View {
     let width: CGFloat
     let height: CGFloat
     let selected: Bool
+    var compact = false
     let action: () -> Void
     @State private var hovering = false
 
+    /// Narrow keys can't fit "⌥ opt", so show just the symbol.
+    private var label: String {
+        guard compact, width < 34, let symbol = key.label.split(separator: " ").first, symbol.count < key.label.count else { return key.label }
+        return String(symbol)
+    }
+
     var body: some View {
         Button(action: action) {
-            Text(key.label)
-                .font(.system(size: key.label.count > 2 ? 10 : 12, weight: .medium))
+            Text(label)
+                .font(.system(size: compact ? (label.count > 2 ? 8 : 10) : (key.label.count > 2 ? 10 : 12), weight: .medium))
                 .foregroundStyle(selected ? .white : .primary)
                 .frame(width: width, height: height)
                 .background(

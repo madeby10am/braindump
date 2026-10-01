@@ -38,9 +38,11 @@ final class AudioCaptureUnit {
 
     let cacheState: AudioEngineCacheState
     let voiceProcessing: Bool
+    let dipLevel: DipLevel
 
-    init(route: AudioEngineCacheState.Route, voiceProcessing: Bool) throws {
+    init(route: AudioEngineCacheState.Route, voiceProcessing: Bool, dipLevel: DipLevel = .medium) throws {
         self.voiceProcessing = voiceProcessing
+        self.dipLevel = dipLevel
         cacheState = AudioEngineCacheState(route: route)
         do {
             try configure(route: route)
@@ -105,7 +107,7 @@ final class AudioCaptureUnit {
             try set(kAudioUnitProperty_StreamFormat, scope: kAudioUnitScope_Input, bus: 0, value: format)
             if #available(macOS 14.0, *) {
                 try set(kAUVoiceIOProperty_OtherAudioDuckingConfiguration, scope: kAudioUnitScope_Global, bus: 0,
-                        value: AUVoiceIOOtherAudioDuckingConfiguration(mEnableAdvancedDucking: false, mDuckingLevel: .mid))
+                        value: AUVoiceIOOtherAudioDuckingConfiguration(mEnableAdvancedDucking: false, mDuckingLevel: dipLevel.audioUnitLevel))
             }
         }
 
@@ -278,4 +280,16 @@ private final class AudioCaptureRenderState {
         return ExtAudioFileDispose(file)
     }
 
+}
+
+@available(macOS 14.0, *)
+extension DipLevel {
+    /// macOS's own ducking strengths for the voice-processing unit.
+    var audioUnitLevel: AUVoiceIOOtherAudioDuckingLevel {
+        switch self {
+        case .light: return .min
+        case .medium: return .mid
+        case .strong: return .max
+        }
+    }
 }

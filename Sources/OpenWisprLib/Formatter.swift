@@ -153,7 +153,7 @@ public final class Formatter {
         guard words >= (settings.minWords ?? FormatterConfig.defaultMinWords) else { return (text, nil) }
 
         let started = Date()
-        guard let result = request(trimmed, settings: settings), !result.isEmpty else {
+        guard let result = generate(trimmed, settings: settings) else {
             print("Formatter: fell back to raw transcript")
             return (text, nil)
         }
@@ -168,8 +168,78 @@ public final class Formatter {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
         let started = Date()
-        guard let result = request(trimmed, settings: settings), !result.isEmpty else { return nil }
+        guard let result = generate(trimmed, settings: settings) else { return nil }
         return (result, Date().timeIntervalSince(started))
+    }
+
+    /// One model call, checked. A small model sometimes answers the dictation instead of
+    /// rewriting it (a joke, a translation, advice) or copies words from its examples. Such an
+    /// output is rejected: the other styles retry once as Clean Up, and if that fails too the
+    /// caller falls back to the speaker's own words. Custom instructions are exempt, since a
+    /// custom prompt may legitimately translate or summarize.
+    private func generate(_ text: String, settings: FormatterConfig) -> String? {
+        guard let first = request(text, settings: settings), !first.isEmpty else { return nil }
+        let style = settings.formatStyle
+        if style.id == FormatStyle.customID || Formatter.isFaithful(input: text, output: first) { return first }
+
+        print("Formatter: \(style.name) output was not a rewrite of the dictation")
+        guard style.id != FormatStyle.cleanUp.id else { return nil }
+        var retry = settings
+        retry.style = FormatStyle.cleanUp.id
+        retry.prompt = nil
+        guard let second = request(text, settings: retry), Formatter.isFaithful(input: text, output: second) else { return nil }
+        return second
+    }
+
+    private static let stopWords: Set<String> = Set("""
+        that this with from have what your about there they them then than their would could should which where when \
+        while were been being into just like really very also only some more most much many such other another \
+        because though although however these those here does doing done will shall gonna wanna kind sort thing \
+        things stuff yeah okay actually basically maybe probably can't don't doesn't isn't it's i'm i've i'll i'd \
+        you're we're they're that's what's there's let's
+        """.split(whereSeparator: \.isWhitespace).map(String.init))
+
+    /// The words that carry meaning: 4+ letters, not a stop word or number, with a plural/tense ending trimmed.
+    static func contentWords(_ text: String) -> Set<String> {
+        var out = Set<String>()
+        for raw in text.lowercased().split(whereSeparator: { !($0.isLetter || $0.isNumber || $0 == "'") }) {
+            var w = raw.trimmingCharacters(in: CharacterSet(charactersIn: "'"))
+            guard w.count >= 4, !stopWords.contains(w), !w.allSatisfy({ $0.isNumber }) else { continue }
+            for suffix in ["ing", "ed", "es", "s", "ly"] where w.hasSuffix(suffix) && w.count - suffix.count >= 4 {
+                w = String(w.dropLast(suffix.count))
+                break
+            }
+            out.insert(w)
+        }
+        return out
+    }
+
+    /// Phrases a model uses when it is answering or refusing instead of rewriting.
+    private static let assistantSpeak = try! NSRegularExpression(
+        pattern: "\\b(?:i would recommend|i recommend|i'd recommend|i can't|i cannot|i'm sorry|i am sorry|i apologize|as an ai"
+            + "|language model|rewriting tool|cleanup tool|here is|here's|here are|certainly|of course|absolutely)\\b|^sure[,!]",
+        options: .caseInsensitive)
+
+    private static let placeholder = try! NSRegularExpression(pattern: "\\[[^\\]]+\\]")
+
+    /// A rewrite reuses the speaker's words. Most of the output's meaningful words must come from the
+    /// input (precision), and most of the input's must survive (recall). Answers, translations, jokes,
+    /// role-play and text copied from a prompt example fail one or both. Assistant phrases ("I recommend",
+    /// "I cannot") and [Name] placeholders the speaker never said fail too. Too little text to judge passes.
+    static func isFaithful(input: String, output: String) -> Bool {
+        let range = NSRange(output.startIndex..., in: output)
+        let spoken = input.lowercased()
+        if let m = assistantSpeak.firstMatch(in: output, range: range), let r = Range(m.range, in: output),
+           !spoken.contains(output[r].lowercased()) { return false }
+        if placeholder.firstMatch(in: output, range: range) != nil,
+           placeholder.firstMatch(in: input, range: NSRange(input.startIndex..., in: input)) == nil { return false }
+
+        let wanted = contentWords(input)
+        guard wanted.count >= 5 else { return true }
+        let got = contentWords(output)
+        guard !got.isEmpty else { return false }
+        let shared = Double(wanted.intersection(got).count)
+        return shared / Double(got.count) >= 0.65 && shared / Double(wanted.count) >= 0.2
     }
 
     public var isRunning: Bool {
@@ -253,10 +323,10 @@ public final class Formatter {
         }
         var out: [[String: String]] = [["role": "system", "content": system]]
         for ex in examples {
-            out.append(["role": "user", "content": "<transcript>\n\(ex.transcript)\n</transcript>"])
+            out.append(["role": "user", "content": FormatStyle.wrap(ex.transcript)])
             out.append(["role": "assistant", "content": ex.output])
         }
-        out.append(["role": "user", "content": "<transcript>\n\(transcript)\n</transcript>"])
+        out.append(["role": "user", "content": FormatStyle.wrap(transcript)])
         return out
     }
 
@@ -265,8 +335,10 @@ public final class Formatter {
         if let range = s.range(of: "</think>") {
             s = String(s[range.upperBound...])
         }
-        s = s.replacingOccurrences(of: "<transcript>", with: "")
-        s = s.replacingOccurrences(of: "</transcript>", with: "")
+        for tag in [FormatStyle.inputTag, "transcript"] {
+            s = s.replacingOccurrences(of: "<\(tag)>", with: "")
+            s = s.replacingOccurrences(of: "</\(tag)>", with: "")
+        }
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

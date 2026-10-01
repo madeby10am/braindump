@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 public class Transcriber {
@@ -23,7 +24,7 @@ public class Transcriber {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: whisperPath)
-        process.arguments = arguments(modelPath: modelPath, audioURL: audioURL)
+        process.arguments = arguments(modelPath: modelPath, audioURL: audioURL, audioDuration: Transcriber.duration(of: audioURL))
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -55,27 +56,56 @@ public class Transcriber {
         return output
     }
 
-    func arguments(modelPath: String, audioURL: URL) -> [String] {
+    /// whisper.cpp decodes audio in 30-second windows.
+    static let singleWindowSeconds: TimeInterval = 28
+
+    /// Length of a recording, or infinity when it can't be read (which keeps the long-recording settings).
+    static func duration(of url: URL) -> TimeInterval {
+        guard let file = try? AVAudioFile(forReading: url), file.fileFormat.sampleRate > 0 else { return .infinity }
+        return Double(file.length) / file.fileFormat.sampleRate
+    }
+
+    /// The hint (prompt) is only used for recordings that fit one decoding window. Across windows it
+    /// made whisper.cpp drop or garble words where they meet, which is worse than missing punctuation;
+    /// longer recordings keep the settings that decode each window on its own.
+    func arguments(modelPath: String, audioURL: URL, audioDuration: TimeInterval = 0) -> [String] {
+        let prompt = audioDuration <= Transcriber.singleWindowSeconds ? effectiveWhisperPrompt : nil
         var args = [
             "-m", modelPath,
             "-f", audioURL.path,
             "-l", language,
             "-nt",
-            // Disable cross-window context carry-over. whisper.cpp feeds each
-            // 30s window's decoded text as the prompt for the next window; on
-            // long dictation this compounds into repetition/hallucination
-            // loops (sentences repeating verbatim, then trailing off).
-            // max-context 0 decodes each window independently and stops it.
-            "-mc", "0",
+            // Cap the text context carried between 30s windows. whisper.cpp feeds each
+            // window's decoded text as the prompt for the next; on long dictation this
+            // compounds into repetition/hallucination loops (sentences repeating verbatim,
+            // then trailing off). With no prompt the cap is 0, so each window decodes
+            // independently. With a prompt it is just big enough for the prompt itself.
+            // A cap of 0 would make whisper.cpp ignore the prompt, even with --carry-initial-prompt.
+            "-mc", String(prompt.map(Transcriber.contextBudget(forPrompt:)) ?? 0),
         ]
-        if let prompt = effectiveWhisperPrompt {
-            args += ["--prompt", prompt]
+        if let prompt {
+            args += ["--prompt", prompt, "--carry-initial-prompt"]
         }
         if spokenPunctuation {
             args += ["--suppress-regex", "[,\\.\\?!;:\\-—]"]
         }
 
         return args
+    }
+
+    /// Context tokens to allow when a prompt is set: the prompt's own length (estimated at
+    /// three characters per token, which errs high) plus a small margin, within whisper's limit of 224.
+    static func contextBudget(forPrompt prompt: String) -> Int {
+        min(224, max(32, (prompt.count + 2) / 3 + 8))
+    }
+
+    /// Style-and-spelling hint handed to Whisper when the user hasn't set their own.
+    /// Punctuated text steers it toward capitals and full stops, and the term list toward
+    /// the right spelling of technical words ("VS Code", "API", "Claude Code"). Kept short so it
+    /// fits in a small context budget.
+    public static func defaultPrompt(vocabulary: [String]?) -> String {
+        let terms = Vocabulary.hint(custom: vocabulary ?? []).prefix(12).joined(separator: ", ")
+        return "Hello, this is a voice note. We use \(terms)."
     }
 
     private var effectiveWhisperPrompt: String? {
@@ -92,6 +122,7 @@ public class Transcriber {
         "SOUND", "Sound", "sound",
         "NOISE", "Noise", "noise",
         "INAUDIBLE", "inaudible",
+        "Pause", "PAUSE", "pause",
     ]
 
     private static let markerRegex = try! NSRegularExpression(

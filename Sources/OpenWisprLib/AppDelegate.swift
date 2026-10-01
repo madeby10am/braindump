@@ -13,10 +13,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     var isReady = false
     public var lastTranscription: String?
     public var lastRawTranscription: String?
+    let overlay = RecordingOverlayController()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarController()
         recorder = AudioRecorder()
+        overlay.levelProvider = { [weak self] in self?.recorder.level ?? 0 }
+        statusBar.onStateChange = { [weak self] state in self?.overlay.update(for: state) }
         registerSleepWakeObservers()
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -55,6 +58,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         inserter = TextInserter()
         migrateAudioDeviceUIDIfNeeded()
         recorder.useVoiceProcessing = config.usesVoiceProcessing
+        recorder.dipLevel = config.effectiveDipLevel
+        let showOverlay = config.usesOverlay
+        let overlayPosition = config.effectiveOverlayPosition
+        DispatchQueue.main.async {
+            self.overlay.isEnabled = showOverlay
+            self.overlay.position = overlayPosition
+        }
         recorder.preferredDeviceID = AudioDeviceManager.resolveConfiguredDeviceID(
             uid: config.audioInputDeviceUID,
             legacyID: config.audioInputDeviceID
@@ -71,10 +81,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             self.statusBar.reprocessHandler = { [weak self] url in
                 self?.reprocess(audioURL: url)
             }
-            self.statusBar.onConfigChange = { [weak self] newConfig in
-                self?.applyConfigChange(newConfig)
-            }
-            self.statusBar.buildMenu()
+            self.statusBar.refresh()
         }
 
         if Transcriber.findWhisperBinary() == nil {
@@ -91,7 +98,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         if !AXIsProcessTrusted() {
             DispatchQueue.main.async {
                 self.statusBar.state = .waitingForPermission
-                self.statusBar.buildMenu()
+                self.statusBar.refresh()
             }
         }
 
@@ -134,7 +141,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 print("Error: \(msg)")
                 DispatchQueue.main.async {
                     self.statusBar.state = .error(msg)
-                    self.statusBar.buildMenu()
+                    self.statusBar.refresh()
                 }
                 return
             }
@@ -166,7 +173,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         isReady = true
         statusBar.state = .idle
-        statusBar.buildMenu()
+        statusBar.refresh()
 
         let hotkeyDesc = config.hotkeySummary()
         print("open-wispr v\(OpenWispr.version)")
@@ -203,6 +210,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         config = newConfig
         Config.applyAppearance(newConfig.appearance)
         recorder.useVoiceProcessing = newConfig.usesVoiceProcessing
+        recorder.dipLevel = newConfig.effectiveDipLevel
+        overlay.isEnabled = newConfig.usesOverlay
+        overlay.position = newConfig.effectiveOverlayPosition
         recorder.preferredDeviceID = newDeviceID
         recorder.prepare()
         transcriber = makeTranscriber(for: config)
@@ -251,17 +261,30 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        statusBar.buildMenu()
+        statusBar.refresh()
 
         let hotkeyDesc = config.hotkeySummary()
         print("Config updated: lang=\(config.language) model=\(config.modelSize) hotkey=\(hotkeyDesc)")
+    }
+
+    /// Everything between Whisper and the clipboard: spoken punctuation, term spelling, then the
+    /// AI formatter. When the formatter is off, skipped (short input) or fails, the rule-based
+    /// tidy-up supplies capitals and full stops so the text is clean either way.
+    private func postProcess(_ raw: String) -> (spelled: String, text: String, seconds: Double?, settings: FormatterConfig) {
+        let punctuated = (config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
+        let spelled = Vocabulary.apply(punctuated, custom: config.vocabulary ?? [])
+        let settings = config.formatterSettings
+        // Fillers come out before the model sees the text: long rambles stay on track when thinned first.
+        let formatted = Formatter.shared.formatWithInfo(BasicTidy.stripFillers(spelled), settings: settings)
+        let text = formatted.seconds == nil ? BasicTidy.tidy(formatted.text) : formatted.text
+        return (spelled, text, formatted.seconds, settings)
     }
 
     private func makeTranscriber(for config: Config) -> Transcriber {
         let transcriber = Transcriber(
             modelSize: config.modelSize,
             language: config.language,
-            whisperPrompt: config.whisperPrompt
+            whisperPrompt: Config.effectiveWhisperPrompt(config)
         )
         transcriber.spokenPunctuation = config.spokenPunctuation?.value ?? false
         return transcriber
@@ -379,16 +402,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let raw = try self.transcriber.transcribe(audioURL: audioURL)
-                let punctuated = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
-                let settings = self.config.formatterSettings
-                let formatted = Formatter.shared.formatWithInfo(punctuated, settings: settings)
-                let text = formatted.text
+                let processed = self.postProcess(raw)
+                let punctuated = processed.spelled
+                let settings = processed.settings
+                let text = processed.text
                 if !text.isEmpty {
                     History.append(
                         raw: punctuated, output: text,
-                        style: formatted.seconds != nil ? settings.formatStyle.name : nil,
-                        model: formatted.seconds != nil ? settings.preset.label : nil,
-                        seconds: formatted.seconds
+                        style: processed.seconds != nil ? settings.formatStyle.name : nil,
+                        model: processed.seconds != nil ? settings.preset.label : nil,
+                        seconds: processed.seconds
                     )
                 }
                 if maxRecordings > 0 {
@@ -401,7 +424,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                         self.inserter.insert(text: text)
                     }
                     self.statusBar.state = .idle
-                    self.statusBar.buildMenu()
+                    self.statusBar.refresh()
                 }
             } catch {
                 if maxRecordings > 0 {
@@ -410,11 +433,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 DispatchQueue.main.async {
                     print("Error: \(error.localizedDescription)")
                     self.statusBar.state = .error(error.localizedDescription)
-                    self.statusBar.buildMenu()
+                    self.statusBar.refresh()
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                         if case .error = self.statusBar.state {
                             self.statusBar.state = .idle
-                            self.statusBar.buildMenu()
+                            self.statusBar.refresh()
                         }
                     }
                 }
@@ -473,7 +496,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     private func resetRecordingStatusToIdleIfNeeded() {
         guard case .recording = statusBar.state else { return }
         statusBar.state = .idle
-        statusBar.buildMenu()
+        statusBar.refresh()
     }
 
     public func reprocess(audioURL: URL) {
@@ -485,16 +508,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self = self else { return }
             do {
                 let raw = try self.transcriber.transcribe(audioURL: audioURL)
-                let punctuated = (self.config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
-                let settings = self.config.formatterSettings
-                let formatted = Formatter.shared.formatWithInfo(punctuated, settings: settings)
-                let text = formatted.text
+                let processed = self.postProcess(raw)
+                let punctuated = processed.spelled
+                let settings = processed.settings
+                let text = processed.text
                 if !text.isEmpty {
                     History.append(
                         raw: punctuated, output: text,
-                        style: formatted.seconds != nil ? settings.formatStyle.name : nil,
-                        model: formatted.seconds != nil ? settings.preset.label : nil,
-                        seconds: formatted.seconds
+                        style: processed.seconds != nil ? settings.formatStyle.name : nil,
+                        model: processed.seconds != nil ? settings.preset.label : nil,
+                        seconds: processed.seconds
                     )
                 }
                 DispatchQueue.main.async {
@@ -504,10 +527,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(text, forType: .string)
                         self.statusBar.state = .copiedToClipboard
-                        self.statusBar.buildMenu()
+                        self.statusBar.refresh()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                             self.statusBar.state = .idle
-                            self.statusBar.buildMenu()
+                            self.statusBar.refresh()
                         }
                     } else {
                         self.statusBar.state = .idle

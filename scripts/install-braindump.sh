@@ -1,12 +1,21 @@
 #!/bin/bash
-# Build BrainDump from this checkout, install it to ~/Applications, and run it
+# Build BrainDump from this checkout, install it to /Applications or ~/Applications, and run it
 # at login. Stops (but does not uninstall) the Homebrew open-wispr service, so
 # rolling back is: launchctl bootout gui/$UID ~/Library/LaunchAgents/com.madeby10am.braindump.plist
 #                  brew services start open-wispr
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$HOME/Applications/BrainDump.app"
+# Update in place if BrainDump already lives in /Applications; otherwise ~/Applications.
+# Set BRAINDUMP_APP_DIR to choose somewhere else.
+if [ -n "${BRAINDUMP_APP_DIR:-}" ]; then
+    APP_DIR="$BRAINDUMP_APP_DIR"
+elif [ -d "/Applications/BrainDump.app" ]; then
+    APP_DIR="/Applications"
+else
+    APP_DIR="$HOME/Applications"
+fi
+APP="$APP_DIR/BrainDump.app"
 AGENT="$HOME/Library/LaunchAgents/com.madeby10am.braindump.plist"
 LOG="$HOME/Library/Logs/braindump.log"
 
@@ -26,7 +35,7 @@ launchctl bootout "gui/$UID" "$AGENT" 2>/dev/null || true
 pkill -f "BrainDump.app/Contents/MacOS/open-wispr" 2>/dev/null || true
 
 rm -rf "$APP"
-mkdir -p "$HOME/Applications"
+mkdir -p "$APP_DIR"
 mv BrainDump.app "$APP"
 
 cat > "$AGENT" <<PLIST
