@@ -3,37 +3,34 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BrainDump — Talk Messy, Paste Clean (Local AI Dictation for macOS)</title>
-  <meta name="description" content="The best free speech-to-text app for Mac. Hold a key, speak, release — text appears instantly. Powered by Whisper AI, runs 100% on-device. No cloud, no accounts, no subscription. Open source.">
-  <meta name="keywords" content="voice dictation, speech to text, macOS, whisper, on-device, privacy, open source, Apple Silicon, voice typing, dictation app">
+  <title>BrainDump — Talk Messy, Paste Clean | Local AI Dictation for Mac</title>
+  <meta name="description" content="BrainDump turns rambling voice notes into clean text, Claude prompts, emails and Slack messages. Whisper for speech, a local AI model for formatting. 100% on your Mac. No cloud, no API keys.">
+  <meta name="keywords" content="voice dictation, speech to text, macOS, whisper, local AI, llama.cpp, privacy, Apple Silicon, dictation app, AI formatting">
   <meta name="author" content="madeby10am">
-  <link rel="canonical" href="https://open-wispr.com/">
+  <link rel="canonical" href="https://github.com/madeby10am/braindump">
 
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://open-wispr.com/">
-  <meta property="og:title" content="open-wispr — Free Voice Dictation for macOS (100% Local)">
-  <meta property="og:description" content="The best free speech-to-text for Mac. Hold a key, speak, release — text appears instantly. Whisper AI, 100% on-device. No cloud, no subscription.">
-  <meta property="og:image" content="https://open-wispr.com/og.png">
-  <meta property="og:site_name" content="open-wispr">
+  <meta property="og:url" content="https://github.com/madeby10am/braindump">
+  <meta property="og:title" content="BrainDump — Talk Messy, Paste Clean">
+  <meta property="og:description" content="Dictate rambling, get clean text, prompts, emails or Slack messages. Whisper + a local AI model, all on your Mac.">
+  <meta property="og:site_name" content="BrainDump">
 
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="open-wispr — Free Voice Dictation for macOS (100% Local)">
-  <meta name="twitter:description" content="The best free speech-to-text for Mac. Hold a key, speak, release — text appears instantly. Whisper AI, 100% on-device. No subscription.">
-  <meta name="twitter:image" content="https://open-wispr.com/og.png">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="BrainDump — Talk Messy, Paste Clean">
+  <meta name="twitter:description" content="Dictate rambling, get clean text, prompts, emails or Slack messages. Whisper + a local AI model, all on your Mac.">
 
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": "open-wispr",
+    "name": "BrainDump",
     "operatingSystem": "macOS",
     "applicationCategory": "UtilitiesApplication",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "description": "Free, private voice-to-text for macOS. Powered by Whisper AI, runs entirely on-device.",
-    "url": "https://open-wispr.com/",
-    "downloadUrl": "https://open-wispr.com/#install",
-    "softwareVersion": "0.30.0",
-    "author": { "@type": "Organization", "name": "madeby10am" },
+    "description": "Local AI dictation for macOS. Whisper transcribes, a local model formats, nothing leaves your Mac.",
+    "url": "https://github.com/madeby10am/braindump",
+    "downloadUrl": "https://github.com/madeby10am/braindump",
+    "author": { "@type": "Person", "name": "madeby10am" },
     "license": "https://opensource.org/licenses/MIT"
   }
   </script>
@@ -42,54 +39,10 @@
     "@context": "https://schema.org",
     "@type": "FAQPage",
     "mainEntity": [
-      {
-        "@type": "Question",
-        "name": "Is open-wispr really free?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes, completely free and open source under the MIT license. No subscriptions, no usage limits, no premium tier."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Does any audio or text leave my computer?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "No. Everything runs 100% on-device. Audio is recorded to a temporary file, transcribed locally by Whisper, and the file is immediately deleted. There are zero network requests."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How does this compare to VoiceInk, Whisper Flow, or Superwhisper?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "open-wispr is the free, MIT-licensed alternative. VoiceInk ($39.99, GPLv3) is the closest — also open source and local — but adds AI features and custom dictionaries. Wispr Flow ($15/mo) uses cloud AI. Superwhisper ($8.49/mo) is local but closed-source. open-wispr gives you the same core push-to-talk Whisper experience with zero cost and the most permissive license."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "What Macs are supported?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Any Mac with Apple Silicon (M1 or later) running macOS 13+. Whisper uses Metal GPU acceleration for fast inference. Intel Macs are not supported."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "How accurate is it compared to Apple Dictation?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Significantly better. Whisper handles punctuation, technical jargon, code terms, and accented speech far more reliably than Apple's built-in dictation. It supports 99 languages."
-        }
-      },
-      {
-        "@type": "Question",
-        "name": "Can I use it in any app?",
-        "acceptedAnswer": {
-          "@type": "Answer",
-          "text": "Yes. open-wispr types transcribed text at your cursor position, so it works in any application — editors, browsers, terminals, Slack, email, and more."
-        }
-      }
+      {"@type": "Question","name": "Is BrainDump free?","acceptedAnswer": {"@type": "Answer","text": "Yes. It is open source under the MIT license, with no subscription and no API keys."}},
+      {"@type": "Question","name": "Does any audio or text leave my computer?","acceptedAnswer": {"@type": "Answer","text": "No. Whisper transcribes on your Mac and the formatting model runs locally through llama.cpp. Dictation history is stored only on your Mac."}},
+      {"@type": "Question","name": "What Macs are supported?","acceptedAnswer": {"@type": "Answer","text": "Apple Silicon Macs (M1 or later) running macOS 13 or newer. Intel Macs are not supported."}},
+      {"@type": "Question","name": "Will it lower the volume of my music while I dictate?","acceptedAnswer": {"@type": "Answer","text": "No. Other audio keeps playing at full volume by default. You can opt in to lowering other audio from the settings gear menu."}}
     ]
   }
   </script>
@@ -613,9 +566,9 @@
 
 <main>
 <section class="hero">
-  <h1>Voice to text, entirely on-device.</h1>
+  <h1>Talk messy. Paste clean.</h1>
 
-  <p class="hero-sub">Hold a key, speak, release. Your words appear at the cursor. Powered by <a href="https://github.com/ggerganov/whisper.cpp">whisper.cpp</a> with Metal acceleration. 100% local — no cloud, no accounts, no telemetry. Free and open source under MIT.</p>
+  <p class="hero-sub">Hold a key and ramble. BrainDump transcribes with Whisper, tidies it with a small AI model, and pastes clean text, a structured Claude prompt, an email, or a Slack message at your cursor. Everything runs on your Mac. No cloud, no accounts, no API keys.</p>
 
   <div class="demo-inline">
     <div class="demo-editor">
@@ -636,35 +589,34 @@
 
 <section id="how" class="how">
   <p class="section-tag">How it works</p>
-  <h2>Everything you need. Nothing you don't.</h2>
+  <h2>Ramble in. Clean text out.</h2>
   <div class="steps-row">
     <div class="step-card">
       <div class="step-num">01</div>
       <div class="step-title">Hold</div>
-      <div class="step-desc">Press and hold the Globe key. Recording starts instantly. A waveform animates in your menu bar.</div>
+      <div class="step-desc">Press and hold your hotkey (Option by default). Recording starts instantly. Pick Hold, Toggle or Auto-stop mode.</div>
     </div>
     <div class="step-card">
       <div class="step-num">02</div>
-      <div class="step-title">Speak</div>
-      <div class="step-desc">Talk naturally. Whisper runs on your GPU via Metal. No network latency, no cloud processing.</div>
+      <div class="step-title">Ramble</div>
+      <div class="step-desc">Say it however it comes out. Whisper transcribes on your Mac, then a local model removes the ums, fixes the structure and applies your chosen style.</div>
     </div>
     <div class="step-card">
       <div class="step-num">03</div>
-      <div class="step-title">Release</div>
-      <div class="step-desc">Let go. Transcribed text is typed at your cursor. Works in any app. The temp audio file is deleted.</div>
+      <div class="step-title">Paste</div>
+      <div class="step-desc">Clean text lands at your cursor in any app. Short dictations skip the model and paste instantly.</div>
     </div>
   </div>
 </section>
 
 <section class="compare">
   <p class="section-tag">Compare</p>
-  <h2>Why open-wispr?</h2>
+  <h2>Why BrainDump?</h2>
   <table class="compare-table">
     <thead>
       <tr>
         <th></th>
-        <th>open-wispr</th>
-        <th>VoiceInk</th>
+        <th>BrainDump</th>
         <th>Wispr Flow</th>
         <th>Superwhisper</th>
         <th>MacWhisper</th>
@@ -674,8 +626,7 @@
     <tbody>
       <tr>
         <td>Price</td>
-        <td class="price-free">Free forever</td>
-        <td>$39.99</td>
+        <td class="price-free">Free</td>
         <td>$15/mo</td>
         <td>$8.49/mo</td>
         <td>$69 lifetime</td>
@@ -684,7 +635,6 @@
       <tr>
         <td>Open source</td>
         <td class="check">MIT</td>
-        <td>GPLv3</td>
         <td class="muted">No</td>
         <td class="muted">No</td>
         <td class="muted">No</td>
@@ -693,74 +643,42 @@
       <tr>
         <td>100% on-device</td>
         <td class="check">Yes</td>
-        <td class="check">Yes</td>
         <td class="muted">No</td>
         <td class="check">Yes</td>
         <td class="check">Yes</td>
         <td class="muted">Partial</td>
       </tr>
       <tr>
-        <td>Works in any app</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="muted">Own app only</td>
-        <td class="check">Yes</td>
-      </tr>
-      <tr>
-        <td>Push-to-talk</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="muted">No</td>
-        <td class="muted">No</td>
-      </tr>
-      <tr>
-        <td>Whisper engine</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="muted">Cloud AI</td>
-        <td class="check">Yes</td>
-        <td class="check">Yes</td>
-        <td class="muted">Apple model</td>
-      </tr>
-      <tr>
-        <td>Account required</td>
-        <td class="check">No</td>
-        <td class="check">No</td>
-        <td class="muted">Yes</td>
-        <td class="muted">Yes</td>
-        <td class="check">No</td>
-        <td class="muted">Apple ID</td>
-      </tr>
-      <tr>
-        <td>AI features</td>
-        <td class="muted">No</td>
-        <td>AI assistant</td>
-        <td>AI rewriting</td>
+        <td>AI cleanup of what you said</td>
+        <td class="check">Local model</td>
+        <td>Cloud AI</td>
         <td>AI formatting</td>
         <td class="muted">No</td>
         <td class="muted">No</td>
       </tr>
       <tr>
-        <td>Languages</td>
-        <td>99</td>
-        <td>100+</td>
-        <td>100+</td>
-        <td>99</td>
-        <td>100+</td>
-        <td>60+</td>
+        <td>Output styles</td>
+        <td class="check">Clean, Claude prompt, Email, Slack, Custom</td>
+        <td>Rewriting</td>
+        <td>Modes</td>
+        <td class="muted">No</td>
+        <td class="muted">No</td>
       </tr>
       <tr>
-        <td>Install method</td>
-        <td>Homebrew</td>
-        <td>App Store</td>
-        <td>App Store</td>
-        <td>App Store</td>
-        <td>App Store</td>
-        <td>Built-in</td>
+        <td>Account or API key</td>
+        <td class="check">None</td>
+        <td class="muted">Account</td>
+        <td class="muted">Account</td>
+        <td class="check">None</td>
+        <td class="muted">Apple ID</td>
+      </tr>
+      <tr>
+        <td>Works in any app</td>
+        <td class="check">Yes</td>
+        <td class="check">Yes</td>
+        <td class="check">Yes</td>
+        <td class="muted">Own app only</td>
+        <td class="check">Yes</td>
       </tr>
     </tbody>
   </table>
@@ -768,134 +686,58 @@
 
 <section class="flow">
   <p class="section-tag">Install flow</p>
-  <h2>Guided setup. Under a minute.</h2>
+  <h2>Five steps. A few minutes.</h2>
   <div class="flow-steps">
     <div class="flow-step">
       <div class="flow-num">01</div>
-      <div class="flow-text"><strong>Paste the install command.</strong> It needs an Apple Silicon Mac with Homebrew and Xcode command-line tools. It builds BrainDump and installs it to ~/Applications.</div>
+      <div class="flow-text"><strong>Paste the install command.</strong> It needs an Apple Silicon Mac with <a href="https://brew.sh">Homebrew</a> and Apple's command-line tools (<code>xcode-select --install</code>). It builds BrainDump and installs it to ~/Applications.</div>
     </div>
     <div class="flow-step">
       <div class="flow-num">02</div>
-      <div class="flow-text"><strong>Grant Accessibility permission.</strong> The installer opens System Settings for you and waits. Toggle the switch, come back.</div>
-    </div>
-    <div class="flow-step">
-      <div class="flow-num">03</div>
       <div class="flow-text"><strong>Grant Microphone permission.</strong> A system dialog appears. Click Allow. One time only.</div>
     </div>
     <div class="flow-step">
+      <div class="flow-num">03</div>
+      <div class="flow-text"><strong>Grant Accessibility permission.</strong> System Settings &rarr; Privacy &amp; Security &rarr; Accessibility. Add BrainDump and switch it on.</div>
+    </div>
+    <div class="flow-step">
       <div class="flow-num">04</div>
-      <div class="flow-text"><strong>Model downloads automatically.</strong> The default <code>base.en</code> model (142 MB) downloads on first launch. You can change this later.</div>
+      <div class="flow-text"><strong>Models download on first use.</strong> About 3 GB total for the speech and formatting models, stored in <code>~/.config/braindump/models</code>.</div>
     </div>
     <div class="flow-step">
       <div class="flow-num">05</div>
-      <div class="flow-text"><strong>Service starts.</strong> A waveform icon appears in your menu bar. Hold Globe, speak, release. Done.</div>
+      <div class="flow-text"><strong>Start talking.</strong> BrainDump lives in your menu bar and opens at login. Hold Option, speak, release.</div>
     </div>
   </div>
 </section>
 
 <section id="features" class="features">
   <p class="section-tag">Features</p>
-  <h2>Nothing extra. Nothing missing.</h2>
+  <h2>Built for people who think out loud.</h2>
   <div class="feature-grid">
     <div class="feature-cell">
       <h3><span class="feature-marker"></span>Private</h3>
-      <p>Audio is recorded to a temp file, transcribed locally, and deleted. Zero network requests. No accounts, no telemetry, no cloud.</p>
+      <p>Speech and formatting both run on your Mac. No cloud, no accounts, no telemetry. Dictation history stays in a local file.</p>
+    </div>
+    <div class="feature-cell">
+      <h3><span class="feature-marker"></span>Five styles</h3>
+      <p>Clean Up, Claude Prompt, Email, Slack, or Custom with your own instructions. Switch from the menu bar or settings.</p>
     </div>
     <div class="feature-cell">
       <h3><span class="feature-marker"></span>Fast</h3>
-      <p>Runs on Apple Silicon GPU via whisper.cpp and Metal. Transcription is real-time or faster on M1 and above.</p>
+      <p>Whisper uses Apple Silicon. Dictations under 15 words skip the formatter and paste instantly. If the model is slow or down, you get the raw transcript.</p>
     </div>
     <div class="feature-cell">
-      <h3><span class="feature-marker"></span>Universal</h3>
-      <p>Text appears at your cursor in any app. Editors, browsers, terminals, Slack, email. Missed your focus? Copy Last Dictation from the menu bar.</p>
+      <h3><span class="feature-marker"></span>Your music keeps playing</h3>
+      <p>BrainDump does not lower other audio while you dictate. Opt in from the settings gear menu if you want noise reduction instead.</p>
     </div>
     <div class="feature-cell">
-      <h3><span class="feature-marker"></span>Configurable</h3>
-      <p>Choose your hotkey, model size, and language. One command to change, one restart to apply. Everything in the terminal.</p>
+      <h3><span class="feature-marker"></span>Settings you can see</h3>
+      <p>A settings window with a live Try-it box, a History tab of your last 50 dictations, a clickable hotkey picker, and light or dark mode.</p>
     </div>
     <div class="feature-cell">
-      <h3><span class="feature-marker"></span>Multilingual</h3>
-      <p>Supports 99 languages via Whisper's multilingual models. Set an ISO 639-1 code in the config and use a non-.en model.</p>
-    </div>
-    <div class="feature-cell">
-      <h3><span class="feature-marker"></span>Lightweight</h3>
-      <p>No Electron. No app bundle to drag. Installs via Homebrew, runs as a background service. Sits quietly in your menu bar.</p>
-    </div>
-  </div>
-</section>
-
-<section class="config">
-  <p class="section-tag">Configuration</p>
-  <h2>One file. Eight options.</h2>
-  <div class="config-example">
-    <div class="card-header">~/.config/open-wispr/config.json</div>
-    <pre>{
-  "<b>hotkey</b>": { "<b>keyCode</b>": 63, "<b>modifiers</b>": [] },
-  "<b>modelSize</b>": "base.en",
-  "<b>language</b>": "en",
-  "<b>spokenPunctuation</b>": false,
-  "<b>maxRecordings</b>": 0,
-  "<b>toggleMode</b>": false
-}</pre>
-  </div>
-  <table class="config-table">
-    <tr><th>Option</th><th>Default</th><th>Values</th></tr>
-    <tr>
-      <td>hotkey</td>
-      <td>63</td>
-      <td>Globe (63), Right Option (61), F5 (96), or any key code</td>
-    </tr>
-    <tr>
-      <td>modifiers</td>
-      <td>[]</td>
-      <td><code>cmd</code> <code>ctrl</code> <code>shift</code> <code>opt</code> &mdash; combine for chords</td>
-    </tr>
-    <tr>
-      <td>modelSize</td>
-      <td>"base.en"</td>
-      <td><code>tiny.en</code> 75 MB, fastest &middot; <code>base.en</code> 142 MB, good balance (default) &middot; <code>small.en</code> 466 MB, more accurate &middot; <code>medium.en</code> 1.5 GB, great accuracy &middot; <code>large-v3-turbo</code> 1.6 GB, fast multilingual &middot; <code>large-v3</code> 3 GB, best accuracy (M1 Pro+ recommended). Quantized <code>-q5_0</code>/<code>-q5_1</code>/<code>-q8_0</code> variants are also available at ~⅓&ndash;½ the size with minimal quality loss &mdash; see the README for the full table.</td>
-    </tr>
-    <tr>
-      <td>language</td>
-      <td>"en"</td>
-      <td>Any ISO 639-1 code. Use a non-.en model for other languages.</td>
-    </tr>
-    <tr>
-      <td>spokenPunctuation</td>
-      <td>false</td>
-      <td>Say "comma", "period", etc. to insert punctuation manually instead of auto-punctuation.</td>
-    </tr>
-    <tr>
-      <td>maxRecordings</td>
-      <td>0</td>
-      <td>Optionally store past recordings locally as <code>.wav</code> files for re-transcribing from the tray menu. 0 = nothing stored (default). Set 1-100 to keep that many recent recordings.</td>
-    </tr>
-    <tr>
-      <td>toggleMode</td>
-      <td>false</td>
-      <td>Press hotkey once to start recording, press again to stop. Default is hold-to-talk.</td>
-    </tr>
-  </table>
-  <p class="config-note">Edit <code>~/.config/open-wispr/config.json</code>, then restart: <code>brew services restart open-wispr</code></p>
-</section>
-
-<section class="testimonial">
-  <p class="section-tag">What people say</p>
-  <div class="testimonial-grid">
-    <div class="testimonial-card">
-      <p class="testimonial-quote">"I use this with Claude Code every day. Hold the key, say what I want, and it just types it out. No more switching between keyboard and some dictation app. It's perfect for long prompts."</p>
-      <div class="testimonial-author">Tanner Thorne</div>
-      <div class="testimonial-role">Software Engineer</div>
-    </div>
-    <div class="testimonial-card">
-      <p class="testimonial-quote">"Been using this -- no sub, no fees, and it's been working just as well."</p>
-      <div class="testimonial-author">@traceyami, on switching from Wispr Flow</div>
-      <div class="testimonial-source"><a href="https://www.threads.com/@traceyami/post/DVztu4xEa0-" target="_blank" rel="noopener">via Threads</a></div>
-    </div>
-    <div class="testimonial-card">
-      <p class="testimonial-quote">"Free, fast, 'it just works' grade local voice typing for your Mac. Been using it a few days now."</p>
-      <div class="testimonial-author">Rajavanya Subramaniyan</div>
-      <div class="testimonial-source"><a href="https://www.linkedin.com/posts/rajavanya_open-wispr-free-voice-dictation-for-macos-activity-7435271462053236737-gQBE" target="_blank" rel="noopener">via LinkedIn</a></div>
+      <h3><span class="feature-marker"></span>Works everywhere</h3>
+      <p>Text appears at your cursor in any app: editors, browsers, terminals, Slack, email.</p>
     </div>
   </div>
 </section>
@@ -905,28 +747,28 @@
   <h2>Common questions.</h2>
   <div class="faq-list">
     <details class="faq-item" open>
-      <summary>Is open-wispr really free?</summary>
-      <p>Yes, completely free and open source under the MIT license. No subscriptions, no usage limits, no premium tier.</p>
+      <summary>Is BrainDump free?</summary>
+      <p>Yes. It is open source under the MIT license. No subscription, no API keys.</p>
     </details>
     <details class="faq-item">
       <summary>Does any audio or text leave my computer?</summary>
-      <p>No. Everything runs 100% on-device. Audio goes to a temp file, transcribed locally by Whisper, then deleted immediately. There are zero network requests -- no cloud, no accounts, no telemetry. Optionally, you can configure open-wispr to store a number of past recordings locally via the <code>maxRecordings</code> setting. Those recordings stay private and on your machine, and we default to not storing anything.</p>
+      <p>No. Whisper transcribes on your Mac and the formatting model runs locally through llama.cpp. Your last 50 dictations are kept in a local history file that you can clear.</p>
     </details>
     <details class="faq-item">
-      <summary>How does this compare to VoiceInk, Whisper Flow, or Superwhisper?</summary>
-      <p>open-wispr is the free, MIT-licensed alternative. VoiceInk ($39.99, GPLv3) is the closest — also open source and local — but adds AI features, custom dictionaries, and app-specific modes. Wispr Flow ($15/mo) uses cloud AI. Superwhisper ($8.49/mo) is local but closed-source. open-wispr gives you the same core experience — push-to-talk local dictation powered by Whisper — with zero cost, zero bloat, and the most permissive license.</p>
+      <summary>Will it lower the volume of my music while I dictate?</summary>
+      <p>No. Other audio keeps playing at full volume by default. Turn on &ldquo;Lower other audio while recording&rdquo; in the settings gear menu if you prefer noise reduction.</p>
     </details>
     <details class="faq-item">
       <summary>What Macs are supported?</summary>
-      <p>Any Mac with Apple Silicon (M1 or later) running macOS 13+. Whisper uses Metal GPU acceleration for fast inference. Intel Macs are not supported.</p>
+      <p>Apple Silicon (M1 or later) running macOS 13 or newer. Intel Macs are not supported. Plan for about 3 GB of disk for the models.</p>
     </details>
     <details class="faq-item">
-      <summary>How accurate is it compared to Apple Dictation?</summary>
-      <p>Significantly better. Whisper handles punctuation, technical jargon, code terms, and accented speech far more reliably than Apple's built-in dictation. It supports 99 languages and produces properly punctuated output by default.</p>
+      <summary>macOS says it can&rsquo;t verify the app. What do I do?</summary>
+      <p>The install script builds BrainDump on your own Mac, so this normally does not appear. If you copy the app from another Mac, right-click it in Applications and choose Open, or allow it under System Settings &rarr; Privacy &amp; Security.</p>
     </details>
     <details class="faq-item">
-      <summary>Can I use it in any app?</summary>
-      <p>Yes. open-wispr types transcribed text at your cursor position, so it works in any application — editors, browsers, terminals, Slack, email, and more. No plugins or integrations required.</p>
+      <summary>Where does this come from?</summary>
+      <p>BrainDump is a fork of <a href="https://github.com/human37/open-wispr">open-wispr</a> by Ammon Taylor (MIT) that adds local AI formatting, styles, a settings window and history.</p>
     </details>
   </div>
 </section>
@@ -947,16 +789,11 @@
   var text=document.getElementById('demoText');
   var cursor=document.getElementById('demoCursor');
   var phrases=[
-    "Jesse, we need to refactor the authentication module. Use JWT tokens, not session cookies.",
-    "The batch purity is at 96%, but the API response times are still too slow. Add Redis caching.",
-    "Gus wants the deployment pipeline locked down. Add branch protection rules and require two approvals.",
-    "I am the one who writes the database migrations. Add an index on the created_at column.",
-    "We need to cook up a WebSocket connection for real-time order tracking. Use exponential backoff on reconnect.",
-    "Saul says the client wants rate limiting on all public endpoints. Use a sliding window algorithm, 100 requests per minute.",
-    "Jesse, stop pushing directly to main. Set up a CI pipeline that runs linting and tests before merge.",
-    "The carwash needs a new frontend. Migrate the dashboard from JavaScript to TypeScript, and add strict mode.",
-    "Hank keeps running the wrong queries. Write integration tests for the payment processing pipeline.",
-    "Say my name. Then refactor the GraphQL schema to support nullable fields and add proper error handling."
+    "Check my email and add the dentist appointment to my calendar.",
+    "Hi Sam, thanks for the update. Can we move Thursday's review to 3pm? I'll send the agenda tonight.",
+    "Fix the login bug where users get logged out after refresh. Keep the change small and add a test.",
+    "Heads up team: the release is moving to Friday. Please finish reviews by end of day Wednesday.",
+    "Summarize this thread and list the three decisions we still need to make."
   ];
   var last=-1;
   var timer;
@@ -1029,6 +866,5 @@
 })();
 </script>
 
-<!-- Cloudflare Web Analytics --><script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "23bacaa8766746dea24c49a09a203f65"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

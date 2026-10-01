@@ -65,7 +65,7 @@ A waveform icon appears in your menu bar when it's running.
 
 The default hotkey is the **Globe key** (🌐, bottom-left). Hold it, speak, release.
 
-On macOS 14 and later, OpenWispr uses native voice processing to reduce playback volume during recording. Playback returns to normal when recording stops.
+BrainDump leaves other audio alone while you dictate. If you want background-noise reduction instead, turn on "Lower other audio while recording" in the settings gear menu; that lowers music and other playback while the mic is active.
 
 > **[Full installation guide](docs/install-guide.md)** — permissions walkthrough with screenshots, non-English macOS instructions, and troubleshooting.
 
