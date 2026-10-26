@@ -295,6 +295,12 @@ struct MenuBarView: View {
             }
             Divider().opacity(0.5)
 
+            formatting
+            Divider().opacity(0.5)
+
+            swearFilter
+            Divider().opacity(0.5)
+
             AccordionRow(icon: "waveform", title: "Speech model", value: model.speechModelSummary, isOpen: open == .speech) { toggle(.speech) }
             if open == .speech { speechModels }
             Divider().opacity(0.5)
@@ -332,9 +338,6 @@ struct MenuBarView: View {
             }
 
             recordingOverlay
-            Divider().opacity(0.5)
-
-            formatting
 
             if !status.recordings.isEmpty {
                 Divider().opacity(0.5)
@@ -456,7 +459,14 @@ struct MenuBarView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
                 RowIcon(name: "wand.and.stars")
-                Text("AI formatting").font(.system(size: 13, weight: .medium))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("AI formatting").font(.system(size: 13, weight: .medium))
+                    Text(model.enabled
+                         ? "Cleans up what you say before pasting. Skips anything under \(model.minWords) words."
+                         : "Off: pastes what you said, minus the ums.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Spacer(minLength: 8)
                 Toggle("", isOn: Binding(get: { model.enabled }, set: { model.enabled = $0; model.save() }))
                     .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
@@ -476,17 +486,37 @@ struct MenuBarView: View {
                     .menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain).tint(.primary).fixedSize()
                 }
                 .padding(.leading, 30)
+                Text(model.style.blurb)
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 30)
                 HStack(spacing: 10) {
-                    Text("Quality").font(.system(size: 12)).foregroundStyle(.secondary)
+                    Text("Speed").font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
                     Picker("", selection: Binding(get: { model.modelName }, set: { model.modelName = $0; model.save() })) {
-                        ForEach(FormatterConfig.models, id: \.name) { Text($0.name == "fast" ? "Fast" : "Polished").tag($0.name) }
+                        ForEach(FormatterConfig.models, id: \.name) { Text($0.name == "fast" ? "Faster" : "Smarter").tag($0.name) }
                     }
                     .pickerStyle(.segmented).labelsHidden().frame(width: 150)
                     .help(FormatterConfig.preset(named: model.modelName).label)
                 }
                 .padding(.leading, 30)
             }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+    }
+
+    // MARK: Swear filter
+
+    private var swearFilter: some View {
+        HStack(spacing: 10) {
+            RowIcon(name: "asterisk")
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Filter swear words").font(.system(size: 13, weight: .medium))
+                Text("Pastes them as f***, s***.").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: Binding(get: { model.filterSwearing }, set: { model.setFilterSwearing($0) }))
+                .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
     }

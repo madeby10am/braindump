@@ -163,6 +163,7 @@ final class SettingsModel: ObservableObject {
     @Published var overlayEnabled = true
     @Published var overlayPosition: OverlayPosition = .top
     @Published var overlayTheme: OverlayTheme = .white
+    @Published var filterSwearing = true
     @Published var language = "en"
     @Published var speechTier: SpeechTier? = .base
     /// A model from the config file that isn't one of the three sizes.
@@ -250,6 +251,13 @@ final class SettingsModel: ObservableObject {
         overlayPosition = position
         persist(config)
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.overlay.preview(brief: true) }
+    }
+
+    func setFilterSwearing(_ on: Bool) {
+        var config = Config.load()
+        config.filterSwearing = FlexBool(on)
+        filterSwearing = on
+        persist(config)
     }
 
     /// Saves the colors, then plays the overlay so you can see them.
@@ -371,6 +379,7 @@ final class SettingsModel: ObservableObject {
         overlayEnabled = config.usesOverlay
         overlayPosition = config.effectiveOverlayPosition
         overlayTheme = config.effectiveOverlayTheme
+        filterSwearing = config.usesSwearFilter
         language = config.language
         speechTier = SpeechTier.tier(for: config.modelSize)
         customSpeechModel = speechTier == nil ? config.modelSize : nil
@@ -510,6 +519,7 @@ enum Theme {
 // MARK: - Views
 
 struct SettingsView: View {
+    @State private var showPresetPrompt = false
     @ObservedObject var model: SettingsModel
 
     static let appIcon: NSImage? = {
@@ -669,9 +679,9 @@ struct SettingsView: View {
     private var instructions: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                SectionTitle(title: "Instructions", subtitle: model.isCustom
+                SectionTitle(title: model.isCustom ? "Instructions" : model.style.name, subtitle: model.isCustom
                     ? "Tell the model exactly how to rewrite your dictation."
-                    : "What the \(model.style.name) style tells the model.")
+                    : model.style.blurb)
                 Spacer()
                 if model.isCustom {
                     Button("Save") { model.save() }
@@ -687,26 +697,33 @@ struct SettingsView: View {
                 }
             }
 
-            ZStack(alignment: .topLeading) {
-                if model.isCustom {
-                    TextEditor(text: $model.customPrompt)
-                        .font(.system(size: 13))
-                        .scrollContentBackground(.hidden)
-                        .padding(10)
-                } else {
+            if model.isCustom {
+                TextEditor(text: $model.customPrompt)
+                    .font(.system(size: 13))
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(height: 150)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(model.customDirty ? Theme.accent.opacity(0.6) : Theme.stroke))
+            } else {
+                // The preset's instructions are model-speak; most people never need them.
+                DisclosureGroup("Show the instructions it uses", isExpanded: $showPresetPrompt) {
                     ScrollView {
                         Text(model.style.prompt)
-                            .font(.system(size: 13))
+                            .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
+                            .padding(12)
                     }
+                    .frame(height: 130)
+                    .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.stroke))
+                    .padding(.top, 6)
                 }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
             }
-            .frame(height: 150)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.card))
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(model.customDirty ? Theme.accent.opacity(0.6) : Theme.stroke))
 
             if model.isCustom {
                 Text(model.customDirty
@@ -786,14 +803,14 @@ struct SettingsView: View {
             StatusPill(status: model.serverStatus)
             Divider().frame(height: 18)
             HStack(spacing: 8) {
-                Text("Model").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                Text("Speed").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                     .fixedSize()
                 Picker("", selection: Binding(
                     get: { model.modelName },
                     set: { model.modelName = $0; model.save() }
                 )) {
                     ForEach(FormatterConfig.models, id: \.name) { m in
-                        Text(m.name == "fast" ? "Fast" : "Polished").tag(m.name)
+                        Text(m.name == "fast" ? "Faster" : "Smarter").tag(m.name)
                     }
                 }
                 .pickerStyle(.segmented)
@@ -935,29 +952,27 @@ private struct HistoryRow: View {
     }
 }
 
-/// "Copy last dictation" and "Copy last raw dictation".
+/// "Copy last dictation", with "what you said" (the raw transcript) in its drop-down.
 struct CopyLastButtons: View {
     @ObservedObject var model: SettingsModel
-    /// Stretch both buttons across the available width.
+    /// Stretch the button across the available width.
     var expand = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            button("Copy last dictation", icon: "doc.on.doc", id: SettingsModel.copyLastID,
-                   enabled: model.lastOutput != nil, action: model.copyLastDictation)
-            button("Copy last raw dictation", icon: "text.quote", id: SettingsModel.copyLastRawID,
-                   enabled: model.lastRaw != nil, action: model.copyLastRawDictation)
-        }
-    }
-
-    private func button(_ title: String, icon: String, id: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        let copied = model.copiedID == id
-        return Button(action: action) {
-            Label(copied ? "Copied" : title, systemImage: copied ? "checkmark" : icon)
+        let copied = model.copiedID == SettingsModel.copyLastID || model.copiedID == SettingsModel.copyLastRawID
+        Menu {
+            Button("Copy what you said (before cleanup)", systemImage: "text.quote", action: model.copyLastRawDictation)
+                .disabled(model.lastRaw == nil)
+        } label: {
+            Label(copied ? "Copied" : "Copy last dictation", systemImage: copied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: 12, weight: .medium))
                 .frame(maxWidth: expand ? .infinity : nil)
+        } primaryAction: {
+            model.copyLastDictation()
         }
-        .disabled(!enabled)
+        .fixedSize(horizontal: !expand, vertical: false)
+        .frame(maxWidth: expand ? .infinity : nil)
+        .disabled(model.lastOutput == nil && model.lastRaw == nil)
     }
 }
 

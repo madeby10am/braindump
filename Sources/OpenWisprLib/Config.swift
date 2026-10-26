@@ -36,6 +36,9 @@ public struct Config: Codable {
     /// Where the overlay appears: "top" (default), "center", "bottom-right", etc.
     public var overlayPosition: String?
     public var effectiveOverlayPosition: OverlayPosition { overlayPosition.flatMap(OverlayPosition.init(rawValue:)) ?? .top }
+    /// Mask strong swear words in what gets pasted ("f***"). On unless set.
+    public var filterSwearing: FlexBool?
+    public var usesSwearFilter: Bool { filterSwearing?.value ?? true }
     /// The overlay's colors: "white" (default), "braindump", "ocean", "sunset", "forest" or "light".
     public var overlayTheme: String?
     public var effectiveOverlayTheme: OverlayTheme { overlayTheme.flatMap(OverlayTheme.init(rawValue:)) ?? .white }
@@ -113,6 +116,7 @@ public struct Config: Codable {
         case overlay
         case overlayPosition
         case overlayTheme
+        case filterSwearing
     }
 
     public init(from decoder: Decoder) throws {
@@ -144,6 +148,7 @@ public struct Config: Codable {
         self.overlay = try c.decodeIfPresent(FlexBool.self, forKey: .overlay)
         self.overlayPosition = try c.decodeIfPresent(String.self, forKey: .overlayPosition)
         self.overlayTheme = try c.decodeIfPresent(String.self, forKey: .overlayTheme)
+        self.filterSwearing = try c.decodeIfPresent(FlexBool.self, forKey: .filterSwearing)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -168,6 +173,7 @@ public struct Config: Codable {
         try c.encodeIfPresent(overlay, forKey: .overlay)
         try c.encodeIfPresent(overlayPosition, forKey: .overlayPosition)
         try c.encodeIfPresent(overlayTheme, forKey: .overlayTheme)
+        try c.encodeIfPresent(filterSwearing, forKey: .filterSwearing)
     }
 
     public init(

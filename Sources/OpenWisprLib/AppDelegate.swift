@@ -272,14 +272,16 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Everything between Whisper and the clipboard: spoken punctuation, term spelling, then the
     /// AI formatter. When the formatter is off, skipped (short input) or fails, the rule-based
-    /// tidy-up supplies capitals and full stops so the text is clean either way.
+    /// tidy-up supplies capitals and full stops so the text is clean either way. The swear filter
+    /// runs last so it covers every path.
     private func postProcess(_ raw: String) -> (spelled: String, text: String, seconds: Double?, settings: FormatterConfig) {
         let punctuated = (config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
         let spelled = Vocabulary.apply(punctuated, custom: config.vocabulary ?? [])
         let settings = config.formatterSettings
         // Fillers come out before the model sees the text: long rambles stay on track when thinned first.
         let formatted = Formatter.shared.formatWithInfo(BasicTidy.stripFillers(spelled), settings: settings)
-        let text = formatted.seconds == nil ? BasicTidy.tidy(formatted.text) : formatted.text
+        let tidied = formatted.seconds == nil ? BasicTidy.tidy(formatted.text) : formatted.text
+        let text = config.usesSwearFilter ? SwearFilter.apply(tidied) : tidied
         return (spelled, text, formatted.seconds, settings)
     }
 
