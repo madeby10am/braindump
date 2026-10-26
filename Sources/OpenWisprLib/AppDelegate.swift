@@ -281,7 +281,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         // Fillers come out before the model sees the text: long rambles stay on track when thinned first.
         let formatted = Formatter.shared.formatWithInfo(BasicTidy.stripFillers(spelled), settings: settings)
         let tidied = formatted.seconds == nil ? BasicTidy.tidy(formatted.text) : formatted.text
-        let text = config.usesSwearFilter ? SwearFilter.apply(tidied) : tidied
+        let text = SwearFilter.apply(tidied, mode: config.effectiveSwearFilter)
         return (spelled, text, formatted.seconds, settings)
     }
 

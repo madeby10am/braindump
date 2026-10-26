@@ -227,7 +227,7 @@ case "render-menu":
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.accessory)
     SettingsWindowController.renderMenuPNG(to: args.count > 2 ? args[2] : "menu.png", dark: args.contains("dark"),
-                                           expanding: ["hotkey", "speech", "dip"].first { args.contains($0) })
+                                           expanding: args.count > 3 ? args[3...].first { !["dark", "light"].contains($0) } : nil)
 case "format":
     // Runs text through the AI formatter exactly as dictation would
     // (starts llama-server, formats, stops). Reads args or stdin.

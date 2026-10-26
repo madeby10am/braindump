@@ -48,10 +48,10 @@ class StatusBarController: NSObject {
         openDropdownIfRequested()
     }
 
-    /// Dev aid for screenshots: `BRAINDUMP_OPEN_MENU=1` (or `hotkey` / `speech`) opens the dropdown at launch.
+    /// Dev aid for screenshots: `BRAINDUMP_OPEN_MENU=1` (or a section name such as `hotkey`) opens the dropdown at launch.
     private func openDropdownIfRequested() {
         guard let value = ProcessInfo.processInfo.environment["BRAINDUMP_OPEN_MENU"], !value.isEmpty else { return }
-        let section: MenuSection? = ["hotkey": .hotkey, "speech": .speech][value]
+        let section = MenuSection(rawValue: value)
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             guard let self, let button = self.statusItem.button else { return }
             self.refreshRecordings()

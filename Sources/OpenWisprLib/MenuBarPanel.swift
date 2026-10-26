@@ -199,8 +199,8 @@ private struct MenuHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
-/// The sections that expand in place.
-enum MenuSection { case hotkey, speech, recordings }
+/// The sections that expand in place. Every setting is one of these: tap the row, pick from the list.
+enum MenuSection: String { case hotkey, formatting, swearing, speech, language, microphone, dipping, overlay, recordings }
 
 struct MenuBarView: View {
     @ObservedObject var model: SettingsModel
@@ -287,77 +287,53 @@ struct MenuBarView: View {
 
     private var controls: some View {
         VStack(spacing: 0) {
-            AccordionRow(icon: "keyboard", title: "Hotkey", value: model.hotkeySummary, isOpen: open == .hotkey) { toggle(.hotkey) }
-            if open == .hotkey {
+            section(.hotkey, icon: "keyboard", title: "Hotkey", value: model.hotkeySummary) {
                 HotkeyPickerView(model: model, compact: true)
-                    .padding(.horizontal, 8)
-                    .padding(.bottom, 10)
             }
-            Divider().opacity(0.5)
-
-            formatting
-            Divider().opacity(0.5)
-
-            swearFilter
-            Divider().opacity(0.5)
-
-            AccordionRow(icon: "waveform", title: "Speech model", value: model.speechModelSummary, isOpen: open == .speech) { toggle(.speech) }
-            if open == .speech { speechModels }
-            Divider().opacity(0.5)
-
-            ControlRow(icon: "globe", title: "Language") {
-                Menu {
-                    Picker("Language", selection: Binding(get: { model.language }, set: { model.setLanguage($0) })) {
-                        ForEach(Config.supportedLanguages, id: \.code) { Text($0.name).tag($0.code) }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    MenuValue(text: model.languageName)
+            section(.formatting, icon: "wand.and.stars", title: "AI formatting", value: model.enabled ? model.style.name : "Off") {
+                formattingChoices
+            }
+            section(.swearing, icon: "asterisk", title: "Swear words", value: model.swearFilter.title) {
+                ForEach(SwearFilter.Mode.allCases) { mode in
+                    ChoiceRow(title: mode.title, detail: mode.explanation, selected: model.swearFilter == mode) { model.setSwearFilter(mode) }
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain).tint(.primary).fixedSize()
             }
-            Divider().opacity(0.5)
-
-            ControlRow(icon: "mic", title: "Microphone") {
-                Menu {
-                    Picker("Microphone", selection: Binding(get: { model.inputDeviceID }, set: { model.setInputDevice($0) })) {
-                        Text("System Default").tag(UInt32?.none)
-                        ForEach(model.inputDevices, id: \.id) { Text($0.name).tag(Optional($0.id)) }
-                    }
-                    .pickerStyle(.inline)
-                } label: {
-                    MenuValue(text: model.selectedInputName)
+            section(.speech, icon: "waveform", title: "Speech model", value: model.speechModelSummary) {
+                speechModels
+            }
+            section(.language, icon: "globe", title: "Language", value: model.languageName) {
+                languageChoices
+            }
+            section(.microphone, icon: "mic", title: "Microphone", value: model.selectedInputName) {
+                ChoiceRow(title: "System Default", detail: "Whatever your Mac is set to use.", selected: model.inputDeviceID == nil) { model.setInputDevice(nil) }
+                ForEach(model.inputDevices, id: \.id) { device in
+                    ChoiceRow(title: device.name, selected: model.inputDeviceID == device.id) { model.setInputDevice(device.id) }
                 }
-                .menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain).tint(.primary).fixedSize()
             }
-            Divider().opacity(0.5)
-
             if DipLevel.isAvailable {
-                musicDipping
-                Divider().opacity(0.5)
+                section(.dipping, icon: "speaker.wave.2", title: "Music dipping",
+                        value: model.voiceProcessing ? model.dipLevel.title : "Off") {
+                    dippingChoices
+                }
             }
-
-            recordingOverlay
-
+            section(.overlay, icon: "waveform.path", title: "Recording overlay",
+                    value: model.overlayEnabled ? "\(model.overlayPosition.title) · \(model.overlayTheme.title)" : "Off", divider: !status.recordings.isEmpty) {
+                overlayChoices
+            }
             if !status.recordings.isEmpty {
-                Divider().opacity(0.5)
-                AccordionRow(icon: "waveform.circle", title: "Recent recordings", value: "\(status.recordings.count)", isOpen: open == .recordings) { toggle(.recordings) }
-                if open == .recordings {
-                    VStack(spacing: 2) {
-                        ForEach(status.recordings) { recording in
-                            Button { actions.reprocess(recording.url) } label: {
-                                HStack {
-                                    Text(recording.label).font(.system(size: 12))
-                                    Spacer()
-                                    Text("Transcribe again").font(.system(size: 11)).foregroundStyle(.secondary)
-                                }
-                                .padding(.horizontal, 12).padding(.vertical, 5)
-                                .contentShape(Rectangle())
+                section(.recordings, icon: "waveform.circle", title: "Recent recordings", value: "\(status.recordings.count)", divider: false) {
+                    ForEach(status.recordings) { recording in
+                        Button { actions.reprocess(recording.url) } label: {
+                            HStack {
+                                Text(recording.label).font(.system(size: 12))
+                                Spacer()
+                                Text("Transcribe again").font(.system(size: 11)).foregroundStyle(.secondary)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .contentShape(Rectangle())
                         }
+                        .buttonStyle(.plain)
                     }
-                    .padding(.bottom, 8)
                 }
             }
         }
@@ -366,14 +342,26 @@ struct MenuBarView: View {
         .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
+    /// One row of the card: the setting and its current value; tap to open its choices below it.
+    @ViewBuilder
+    private func section<Content: View>(_ id: MenuSection, icon: String, title: String, value: String, divider: Bool = true,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        AccordionRow(icon: icon, title: title, value: value, isOpen: open == id) { toggle(id) }
+        if open == id {
+            VStack(alignment: .leading, spacing: 4) { content() }
+                .padding(.horizontal, 8)
+                .padding(.bottom, 10)
+        }
+        if divider { Divider().opacity(0.5) }
+    }
+
     private var speechModels: some View {
-        VStack(spacing: 4) {
+        Group {
             ForEach(SpeechTier.allCases) { tier in
-                SpeechTierRow(
-                    tier: tier,
-                    selected: model.speechTier == tier,
-                    downloaded: Transcriber.modelExists(modelSize: tier.modelName(language: model.language))
-                ) { model.setSpeechTier(tier) }
+                let downloaded = Transcriber.modelExists(modelSize: tier.modelName(language: model.language))
+                ChoiceRow(title: tier.title, tag: tier.tagline, highlightTag: tier == .base, detail: tier.detail,
+                          note: downloaded ? "Downloaded" : "\(tier.megabytes) MB", noteColor: downloaded ? .green : .secondary,
+                          selected: model.speechTier == tier) { model.setSpeechTier(tier) }
             }
             if let custom = model.customSpeechModel {
                 Text("Currently using \(custom) from your config file. Pick a size above to switch.")
@@ -383,142 +371,110 @@ struct MenuBarView: View {
                     .padding(.horizontal, 8)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 10)
     }
 
-    // MARK: Music dipping
-
-    private var musicDipping: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                RowIcon(name: "speaker.wave.2")
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
-                        Text("Music dipping").font(.system(size: 13, weight: .medium))
-                        Image(systemName: "info.circle").font(.system(size: 11)).foregroundStyle(.secondary)
-                    }
-                    Text(DipLevel.shortExplanation).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                Toggle("", isOn: Binding(get: { model.voiceProcessing }, set: { model.setVoiceProcessing($0) }))
-                    .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
+    private var formattingChoices: some View {
+        Group {
+            ChoiceRow(title: "Off", detail: "Pastes what you said, minus the ums.", selected: !model.enabled) {
+                model.enabled = false
+                model.save()
             }
-            if model.voiceProcessing {
-                DipLevelSlider(model: model).padding(.leading, 30)
+            ForEach(FormatStyle.all) { style in
+                ChoiceRow(title: style.name, detail: style.blurb, selected: model.enabled && model.styleID == style.id) {
+                    model.enabled = true
+                    model.selectStyle(style)
+                }
+            }
+            if model.enabled {
+                Text("Speed").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.top, 6)
+                ChoiceRow(title: "Faster", detail: "Quick, and great for everyday dictation.", selected: model.modelName == "fast") {
+                    model.modelName = "fast"
+                    model.save()
+                }
+                ChoiceRow(title: "Smarter", detail: "A bit slower. Better with long, messy rambles.", selected: model.modelName == "polished") {
+                    model.modelName = "polished"
+                    model.save()
+                }
+                Text("Anything under \(model.minWords) words is pasted without AI.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.top, 4)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-        .help(DipLevel.explanation)
     }
 
-    // MARK: Recording overlay
+    /// The most-used languages as choices; the full list lives in "More languages".
+    private static let commonLanguages = ["auto", "en", "es", "fr", "de", "pt", "it", "zh", "ja"]
 
-    private var recordingOverlay: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            recordingOverlayHeader
+    private var languageChoices: some View {
+        Group {
+            ForEach(Config.supportedLanguages.filter { Self.commonLanguages.contains($0.code) }, id: \.code) { language in
+                ChoiceRow(title: language.name, detail: language.code == "auto" ? "Figures out which language you're speaking." : nil,
+                          selected: model.language == language.code) { model.setLanguage(language.code) }
+            }
+            Menu {
+                Picker("Language", selection: Binding(get: { model.language }, set: { model.setLanguage($0) })) {
+                    ForEach(Config.supportedLanguages, id: \.code) { Text($0.name).tag($0.code) }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Text(Self.commonLanguages.contains(model.language) ? "More languages…" : "More languages: \(model.languageName)")
+                    .font(.system(size: 12))
+            }
+            .menuStyle(.borderlessButton).fixedSize()
+            .padding(.horizontal, 10).padding(.top, 4)
+        }
+    }
+
+    private static let dipDetails: [DipLevel: String] = [
+        .light: "Music drops a little.",
+        .medium: "Music drops into the background.",
+        .strong: "Music goes nearly silent.",
+    ]
+
+    private var dippingChoices: some View {
+        Group {
+            ChoiceRow(title: "Off", detail: "Leaves your Mac's sound alone.", selected: !model.voiceProcessing) { model.setVoiceProcessing(false) }
+            ForEach(DipLevel.allCases) { level in
+                ChoiceRow(title: level.title, detail: Self.dipDetails[level], selected: model.voiceProcessing && model.dipLevel == level) {
+                    if !model.voiceProcessing { model.setVoiceProcessing(true) }
+                    model.setDipLevel(level)
+                }
+            }
+            Text("Turns down other sound while you record so your mic doesn't pick it up.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.top, 4)
+        }
+    }
+
+    private var overlayChoices: some View {
+        Group {
+            ChoiceRow(title: "Show while recording", detail: "A voice bar on your screen while you talk.", selected: model.overlayEnabled) {
+                model.setOverlayEnabled(true)
+            }
+            ChoiceRow(title: "Off", selected: !model.overlayEnabled) { model.setOverlayEnabled(false) }
             if model.overlayEnabled {
                 HStack(spacing: 10) {
-                    Text("Position").font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 30)
+                    Text("Position").font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
                     Text(model.overlayPosition.title).font(.system(size: 11)).foregroundStyle(.secondary)
                     PositionGrid(selection: model.overlayPosition) { model.setOverlayPosition($0) }
                 }
+                .padding(.horizontal, 10).padding(.top, 6)
                 HStack(spacing: 10) {
-                    Text("Colors").font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 30)
+                    Text("Colors").font(.system(size: 12)).foregroundStyle(.secondary)
                     Spacer()
                     Text(model.overlayTheme.title).font(.system(size: 11)).foregroundStyle(.secondary)
                     ThemeSwatches(selection: model.overlayTheme) { model.setOverlayTheme($0) }
                 }
+                .padding(.horizontal, 10)
+                Button("Preview", action: actions.previewOverlay)
+                    .controlSize(.small)
+                    .padding(.horizontal, 10).padding(.top, 2)
+                    .help("Play the overlay once")
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-    }
-
-    private var recordingOverlayHeader: some View {
-        HStack(spacing: 10) {
-            RowIcon(name: "waveform")
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Recording overlay").font(.system(size: 13, weight: .medium))
-                Text("Shows a voice bar on your screen while you talk. Pick where and its colors.")
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            Button("Preview", action: actions.previewOverlay)
-                .controlSize(.small)
-                .help("Play the overlay once")
-            Toggle("", isOn: Binding(get: { model.overlayEnabled }, set: { model.setOverlayEnabled($0) }))
-                .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
-        }
-    }
-
-    // MARK: AI formatting
-
-    private var formatting: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                RowIcon(name: "wand.and.stars")
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("AI formatting").font(.system(size: 13, weight: .medium))
-                    Text(model.enabled
-                         ? "Cleans up what you say before pasting. Skips anything under \(model.minWords) words."
-                         : "Off: pastes what you said, minus the ums.")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Toggle("", isOn: Binding(get: { model.enabled }, set: { model.enabled = $0; model.save() }))
-                    .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
-            }
-            if model.enabled {
-                HStack(spacing: 10) {
-                    Text("Style").font(.system(size: 12)).foregroundStyle(.secondary)
-                    Spacer()
-                    Menu {
-                        Picker("Style", selection: Binding(get: { model.styleID }, set: { model.selectStyle(FormatStyle.named($0)) })) {
-                            ForEach(FormatStyle.all) { Label($0.name, systemImage: $0.symbol).tag($0.id) }
-                        }
-                        .pickerStyle(.inline)
-                    } label: {
-                        MenuValue(text: model.style.name)
-                    }
-                    .menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain).tint(.primary).fixedSize()
-                }
-                .padding(.leading, 30)
-                Text(model.style.blurb)
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 30)
-                HStack(spacing: 10) {
-                    Text("Speed").font(.system(size: 12)).foregroundStyle(.secondary)
-                    Spacer()
-                    Picker("", selection: Binding(get: { model.modelName }, set: { model.modelName = $0; model.save() })) {
-                        ForEach(FormatterConfig.models, id: \.name) { Text($0.name == "fast" ? "Faster" : "Smarter").tag($0.name) }
-                    }
-                    .pickerStyle(.segmented).labelsHidden().frame(width: 150)
-                    .help(FormatterConfig.preset(named: model.modelName).label)
-                }
-                .padding(.leading, 30)
-            }
-        }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-    }
-
-    // MARK: Swear filter
-
-    private var swearFilter: some View {
-        HStack(spacing: 10) {
-            RowIcon(name: "asterisk")
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Filter swear words").font(.system(size: 13, weight: .medium))
-                Text("Pastes them as f***, s***.").font(.system(size: 11)).foregroundStyle(.secondary)
-            }
-            Spacer(minLength: 8)
-            Toggle("", isOn: Binding(get: { model.filterSwearing }, set: { model.setFilterSwearing($0) }))
-                .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
-        }
-        .padding(.horizontal, 12).padding(.vertical, 9)
     }
 
     // MARK: Footer
@@ -557,33 +513,6 @@ private struct RowIcon: View {
     }
 }
 
-private struct MenuValue: View {
-    let text: String
-    var body: some View {
-        HStack(spacing: 4) {
-            Text(text).font(.system(size: 12)).lineLimit(1)
-            Image(systemName: "chevron.up.chevron.down").font(.system(size: 8, weight: .bold))
-        }
-        .foregroundStyle(.secondary)
-    }
-}
-
-private struct ControlRow<Trailing: View>: View {
-    let icon: String
-    let title: String
-    @ViewBuilder var trailing: Trailing
-
-    var body: some View {
-        HStack(spacing: 10) {
-            RowIcon(name: icon)
-            Text(title).font(.system(size: 13, weight: .medium))
-            Spacer(minLength: 8)
-            trailing
-        }
-        .padding(.horizontal, 12).padding(.vertical, 9)
-    }
-}
-
 private struct AccordionRow: View {
     let icon: String
     let title: String
@@ -613,10 +542,16 @@ private struct AccordionRow: View {
     }
 }
 
-private struct SpeechTierRow: View {
-    let tier: SpeechTier
+/// One option in an open section: a check, its name (with an optional tag), a line about it,
+/// and an optional note on the right. Every section uses it, so they all look and work the same.
+private struct ChoiceRow: View {
+    let title: String
+    var tag: String? = nil
+    var highlightTag = false
+    var detail: String? = nil
+    var note: String? = nil
+    var noteColor: Color = .secondary
     let selected: Bool
-    let downloaded: Bool
     let action: () -> Void
     @State private var hovering = false
 
@@ -628,25 +563,29 @@ private struct SpeechTierRow: View {
                     .foregroundStyle(selected ? Theme.accent : Color.secondary.opacity(0.6))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
-                        Text(tier.title).font(.system(size: 13, weight: .semibold))
-                        Text(tier.tagline)
-                            .font(.system(size: 10, weight: .medium))
-                            .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(Capsule().fill(tier == .base ? Theme.accent.opacity(0.14) : Color.primary.opacity(0.07)))
-                            .foregroundStyle(tier == .base ? Color.primary : .secondary)
+                        Text(title).font(.system(size: 13, weight: .semibold))
+                        if let tag {
+                            Text(tag)
+                                .font(.system(size: 10, weight: .medium))
+                                .padding(.horizontal, 6).padding(.vertical, 1)
+                                .background(Capsule().fill(highlightTag ? Theme.accent.opacity(0.14) : Color.primary.opacity(0.07)))
+                                .foregroundStyle(highlightTag ? Color.primary : .secondary)
+                        }
                     }
-                    Text(tier.detail)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
+                    if let detail {
+                        Text(detail)
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .multilineTextAlignment(.leading)
+                    }
                 }
                 Spacer(minLength: 4)
-                Text(downloaded ? "Downloaded" : "\(tier.megabytes) MB")
-                    .font(.system(size: 10))
-                    .foregroundStyle(downloaded ? Color.green : .secondary)
+                if let note {
+                    Text(note).font(.system(size: 10)).foregroundStyle(noteColor)
+                }
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
+            .padding(.horizontal, 10).padding(.vertical, detail == nil ? 6 : 8)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 10).fill(selected ? Theme.accent.opacity(0.10) : (hovering ? Color.primary.opacity(0.04) : .clear)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(selected ? Theme.accent.opacity(0.45) : .clear))
@@ -736,7 +675,7 @@ extension MenuBarPanelController {
         if section == "dip" { model.voiceProcessing = true }
         let status = MenuBarStatus()
         status.label = "Ready"
-        let expanded: MenuSection? = ["hotkey": .hotkey, "speech": .speech][section ?? ""]
+        let expanded = section.flatMap(MenuSection.init(rawValue:))
         // The real panel sits on a blurred menu background; stand in for it here.
         let hosting = NSHostingView(rootView: MenuBarView(model: model, status: status, actions: MenuBarActions(), maxHeight: 900, expanded: expanded)
             .background(Color(nsColor: .windowBackgroundColor)))

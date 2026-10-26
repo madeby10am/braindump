@@ -23,6 +23,4 @@ public enum DipLevel: String, CaseIterable, Identifiable {
         if #available(macOS 14.0, *) { return true }
         return false
     }
-
-    public static let shortExplanation = "Lowers other sound while you record to prevent feedback."
 }

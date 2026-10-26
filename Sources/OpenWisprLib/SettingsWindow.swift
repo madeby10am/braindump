@@ -163,7 +163,7 @@ final class SettingsModel: ObservableObject {
     @Published var overlayEnabled = true
     @Published var overlayPosition: OverlayPosition = .top
     @Published var overlayTheme: OverlayTheme = .white
-    @Published var filterSwearing = true
+    @Published var swearFilter: SwearFilter.Mode = .stars
     @Published var language = "en"
     @Published var speechTier: SpeechTier? = .base
     /// A model from the config file that isn't one of the three sizes.
@@ -253,10 +253,10 @@ final class SettingsModel: ObservableObject {
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.overlay.preview(brief: true) }
     }
 
-    func setFilterSwearing(_ on: Bool) {
+    func setSwearFilter(_ mode: SwearFilter.Mode) {
         var config = Config.load()
-        config.filterSwearing = FlexBool(on)
-        filterSwearing = on
+        config.swearFilter = mode.rawValue
+        swearFilter = mode
         persist(config)
     }
 
@@ -379,7 +379,7 @@ final class SettingsModel: ObservableObject {
         overlayEnabled = config.usesOverlay
         overlayPosition = config.effectiveOverlayPosition
         overlayTheme = config.effectiveOverlayTheme
-        filterSwearing = config.usesSwearFilter
+        swearFilter = config.effectiveSwearFilter
         language = config.language
         speechTier = SpeechTier.tier(for: config.modelSize)
         customSpeechModel = speechTier == nil ? config.modelSize : nil
