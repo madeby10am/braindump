@@ -171,7 +171,7 @@ final class SettingsModel: ObservableObject {
     @Published var inputDevices: [AudioInputDevice] = []
     @Published var inputDeviceID: UInt32?
 
-    @Published var tryInput = "okay so um I need you to like check my email and then uh add the dentist thing to my calendar for friday and also like make me a grocery list eggs milk coffee you know"
+    @Published var tryInput = "okay so um I want you to go through my recipe app and like do a full cleanup you know first the search is super slow like it takes three seconds to find anything I think it's because it loads every recipe at once then the dark mode is broken on the settings page like the text is black on black and uh add a favorites button on each recipe card actually no put it on the recipe page itself not the card and don't touch the login stuff it finally works and when you're done send me a short list of what you changed and anything that's still broken"
     @Published var tryOutput = ""
     @Published var tryInfo = ""
     @Published var isTrying = false

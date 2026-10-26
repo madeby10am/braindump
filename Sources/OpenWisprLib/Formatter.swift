@@ -286,7 +286,9 @@ public final class Formatter {
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.httpBody = payload
-        req.timeoutInterval = settings.timeoutSeconds ?? FormatterConfig.defaultTimeout
+        // Long rambles take longer to rewrite: allow about a second per 60 characters on top
+        // of the default, so a long dictation isn't cut off and pasted raw.
+        req.timeoutInterval = settings.timeoutSeconds ?? max(FormatterConfig.defaultTimeout, 10 + Double(text.count) / 60)
 
         let semaphore = DispatchSemaphore(value: 0)
         var output: String?
