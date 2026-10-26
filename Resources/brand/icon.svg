@@ -1,20 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#7C3AED"/>
-      <stop offset="0.55" stop-color="#DB2777"/>
-      <stop offset="1" stop-color="#F97316"/>
+      <stop offset="0" stop-color="#2A2A30"/>
+      <stop offset="1" stop-color="#0A0A0C"/>
     </linearGradient>
     <radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
-      <stop offset="0" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.12"/>
       <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="brain" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#FFFFFF"/>
-      <stop offset="1" stop-color="#FDE7F3"/>
+      <stop offset="1" stop-color="#E4E4E8"/>
     </linearGradient>
     <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#3B0764" flood-opacity="0.35"/>
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000000" flood-opacity="0.5"/>
     </filter>
   <clipPath id="brainclip"><path d="
       M 505 262
@@ -61,7 +60,7 @@
       C 604 752 550 758 519 730 Z"/>
   </g>
   <!-- folds -->
-  <g clip-path="url(#brainclip)" fill="none" stroke="#C026D3" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
+  <g clip-path="url(#brainclip)" fill="none" stroke="#16161A" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" opacity="0.85">
     <path d="M 392 268 C 400 300 430 318 462 312"/>
     <path d="M 286 322 C 316 330 334 356 330 390"/>
     <path d="M 232 428 C 272 420 312 438 322 474 C 334 510 380 520 410 500"/>

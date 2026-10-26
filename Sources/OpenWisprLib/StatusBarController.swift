@@ -37,7 +37,7 @@ class StatusBarController: NSObject {
         super.init()
 
         if let button = statusItem.button {
-            button.image = StatusBarController.drawLogo(active: false)
+            button.image = StatusBarController.drawLogo()
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -185,7 +185,7 @@ class StatusBarController: NSObject {
 
         switch state {
         case .idle:
-            setIcon(StatusBarController.drawLogo(active: false))
+            setIcon(StatusBarController.drawLogo())
         case .recording:
             startRecordingAnimation()
         case .transcribing:
@@ -346,28 +346,17 @@ class StatusBarController: NSObject {
 
     // MARK: - Custom drawn icons
 
-    /// The menu-bar brain, filled with the app icon's violet, crimson and orange.
-    static func drawLogo(active: Bool) -> NSImage {
+    /// The menu-bar brain as a template image, so macOS draws it black or white to match the
+    /// menu bar like every other app's icon.
+    static func drawLogo() -> NSImage {
         let config = NSImage.SymbolConfiguration(pointSize: 15, weight: .medium)
         guard let brain = NSImage(systemSymbolName: "brain", accessibilityDescription: "BrainDump")?
             .withSymbolConfiguration(config) else {
             return NSImage(size: NSSize(width: 18, height: 18))
         }
-        let gradient = NSGradient(colorsAndLocations:
-            (NSColor(srgbRed: 0.486, green: 0.227, blue: 0.929, alpha: 1), 0),   // #7C3AED
-            (NSColor(srgbRed: 0.859, green: 0.153, blue: 0.467, alpha: 1), 0.55), // #DB2777
-            (NSColor(srgbRed: 0.976, green: 0.451, blue: 0.086, alpha: 1), 1)     // #F97316
-        )
-        let image = NSImage(size: brain.size, flipped: false) { rect in
-            brain.draw(in: rect)
-            // Keep the gradient only where the brain was drawn.
-            NSGraphicsContext.current?.compositingOperation = .sourceIn
-            gradient?.draw(in: rect, angle: -45)
-            return true
-        }
-        image.isTemplate = false
-        image.accessibilityDescription = "BrainDump"
-        return image
+        brain.isTemplate = true
+        brain.accessibilityDescription = "BrainDump"
+        return brain
     }
 
     static func drawDownloadProgress(_ percent: Double, pulseAlpha: CGFloat = 1.0) -> NSImage {

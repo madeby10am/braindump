@@ -36,6 +36,9 @@ public struct Config: Codable {
     /// Where the overlay appears: "top" (default), "center", "bottom-right", etc.
     public var overlayPosition: String?
     public var effectiveOverlayPosition: OverlayPosition { overlayPosition.flatMap(OverlayPosition.init(rawValue:)) ?? .top }
+    /// The overlay's colors: "white" (default), "braindump", "ocean", "sunset", "forest" or "light".
+    public var overlayTheme: String?
+    public var effectiveOverlayTheme: OverlayTheme { overlayTheme.flatMap(OverlayTheme.init(rawValue:)) ?? .white }
     public var dipLevel: String?
     public var effectiveDipLevel: DipLevel { dipLevel.flatMap(DipLevel.init(rawValue:)) ?? .medium }
 
@@ -109,6 +112,7 @@ public struct Config: Codable {
         case dipLevel
         case overlay
         case overlayPosition
+        case overlayTheme
     }
 
     public init(from decoder: Decoder) throws {
@@ -139,6 +143,7 @@ public struct Config: Codable {
         self.dipLevel = try c.decodeIfPresent(String.self, forKey: .dipLevel)
         self.overlay = try c.decodeIfPresent(FlexBool.self, forKey: .overlay)
         self.overlayPosition = try c.decodeIfPresent(String.self, forKey: .overlayPosition)
+        self.overlayTheme = try c.decodeIfPresent(String.self, forKey: .overlayTheme)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -162,6 +167,7 @@ public struct Config: Codable {
         try c.encodeIfPresent(dipLevel, forKey: .dipLevel)
         try c.encodeIfPresent(overlay, forKey: .overlay)
         try c.encodeIfPresent(overlayPosition, forKey: .overlayPosition)
+        try c.encodeIfPresent(overlayTheme, forKey: .overlayTheme)
     }
 
     public init(

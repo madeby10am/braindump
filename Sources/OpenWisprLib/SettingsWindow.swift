@@ -84,8 +84,9 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     /// Debug: draws one frame of the recording overlay offscreen.
     /// `open-wispr render-overlay <path> [thinking] [dark] [quiet|loud] [time]`.
-    public static func renderOverlayPNG(to path: String, thinking: Bool, dark: Bool, level: Double, time: Double) {
-        RecordingOverlayController.renderPNG(to: path, thinking: thinking, dark: dark, level: level, time: time)
+    public static func renderOverlayPNG(to path: String, thinking: Bool, dark: Bool, level: Double, time: Double,
+                                        theme: OverlayTheme = .white) {
+        RecordingOverlayController.renderPNG(to: path, thinking: thinking, dark: dark, level: level, time: time, theme: theme)
     }
 
     /// Debug: draws the menu-bar dropdown offscreen to a PNG.
@@ -161,6 +162,7 @@ final class SettingsModel: ObservableObject {
     @Published var showDipPanel = false
     @Published var overlayEnabled = true
     @Published var overlayPosition: OverlayPosition = .top
+    @Published var overlayTheme: OverlayTheme = .white
     @Published var language = "en"
     @Published var speechTier: SpeechTier? = .base
     /// A model from the config file that isn't one of the three sizes.
@@ -248,6 +250,19 @@ final class SettingsModel: ObservableObject {
         overlayPosition = position
         persist(config)
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.overlay.preview(brief: true) }
+    }
+
+    /// Saves the colors, then plays the overlay so you can see them.
+    func setOverlayTheme(_ theme: OverlayTheme) {
+        var config = Config.load()
+        config.overlayTheme = theme.rawValue
+        overlayTheme = theme
+        persist(config)
+        DispatchQueue.main.async {
+            guard let overlay = (NSApp.delegate as? AppDelegate)?.overlay else { return }
+            overlay.theme = theme
+            overlay.preview(brief: true)
+        }
     }
 
     func setDipLevel(_ level: DipLevel) {
@@ -355,6 +370,7 @@ final class SettingsModel: ObservableObject {
         dipLevel = config.effectiveDipLevel
         overlayEnabled = config.usesOverlay
         overlayPosition = config.effectiveOverlayPosition
+        overlayTheme = config.effectiveOverlayTheme
         language = config.language
         speechTier = SpeechTier.tier(for: config.modelSize)
         customSpeechModel = speechTier == nil ? config.modelSize : nil
@@ -478,12 +494,15 @@ final class SettingsModel: ObservableObject {
 
 // MARK: - Theme
 
+/// Black and white: the accent is the text color (black in light mode, white in dark),
+/// and anything drawn on it uses the window background so it stays readable.
 enum Theme {
-    static let gradient = LinearGradient(
-        colors: [Color(red: 0.49, green: 0.23, blue: 0.93), Color(red: 0.86, green: 0.15, blue: 0.47), Color(red: 0.98, green: 0.45, blue: 0.09)],
-        startPoint: .topLeading, endPoint: .bottomTrailing
-    )
-    static let accent = Color(red: 0.75, green: 0.15, blue: 0.83)
+    static let accent = Color.primary
+    static let onAccent = Color(nsColor: .windowBackgroundColor)
+    /// An "on" switch: a gray that stands apart from the off track and the white knob in both modes.
+    static let switchOn = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? NSColor(white: 0.62, alpha: 1) : NSColor(white: 0.22, alpha: 1)
+    })
     static let card = Color(nsColor: .controlBackgroundColor)
     static let stroke = Color.primary.opacity(0.08)
 }
@@ -600,6 +619,15 @@ struct SettingsView: View {
                         set: { model.setOverlayPosition($0) }
                     )) {
                         ForEach(OverlayPosition.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                }
+                Menu("Overlay colors") {
+                    Picker("Overlay colors", selection: Binding(
+                        get: { model.overlayTheme },
+                        set: { model.setOverlayTheme($0) }
+                    )) {
+                        ForEach(OverlayTheme.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.inline)
                 }
@@ -752,7 +780,7 @@ struct SettingsView: View {
             )) {
                 Text("AI Formatting").font(.system(size: 12, weight: .semibold))
             }
-            .toggleStyle(.switch)
+            .toggleStyle(.switch).tint(Theme.switchOn)
             .controlSize(.small)
             .fixedSize()
             StatusPill(status: model.serverStatus)
@@ -990,7 +1018,7 @@ private struct MusicDippingPanel: View {
                     get: { model.voiceProcessing },
                     set: { model.setVoiceProcessing($0) }
                 ))
-                .toggleStyle(.switch)
+                .toggleStyle(.switch).tint(Theme.switchOn)
                 .labelsHidden()
             }
             Text(DipLevel.explanation)
@@ -1031,10 +1059,10 @@ private struct StyleCard: View {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(selected ? AnyShapeStyle(Theme.gradient) : AnyShapeStyle(Color.primary.opacity(0.06)))
+                        .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color.primary.opacity(0.06)))
                     Image(systemName: style.symbol)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(selected ? .white : .secondary)
+                        .foregroundStyle(selected ? Theme.onAccent : .secondary)
                 }
                 .frame(width: 30, height: 30)
                 VStack(alignment: .leading, spacing: 2) {
@@ -1103,10 +1131,10 @@ private struct GradientButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onAccent)
             .padding(.vertical, 7)
             .padding(.horizontal, 12)
-            .background(Capsule().fill(Theme.gradient))
+            .background(Capsule().fill(Theme.accent))
             .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.4)
     }
 }

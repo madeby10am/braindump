@@ -230,14 +230,11 @@ private struct KeyCap: View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: compact ? (label.count > 2 ? 8 : 10) : (key.label.count > 2 ? 10 : 12), weight: .medium))
-                .foregroundStyle(selected ? .white : .primary)
+                .foregroundStyle(selected ? Theme.onAccent : .primary)
                 .frame(width: width, height: height)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(selected ? AnyShapeStyle(LinearGradient(
-                            colors: [Color(red: 0.49, green: 0.23, blue: 0.93), Color(red: 0.86, green: 0.15, blue: 0.47)],
-                            startPoint: .topLeading, endPoint: .bottomTrailing))
-                              : AnyShapeStyle(Color(nsColor: .controlBackgroundColor)))
+                        .fill(selected ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Color(nsColor: .controlBackgroundColor)))
                         .shadow(color: .black.opacity(0.12), radius: 0, x: 0, y: 1)
                 )
                 .overlay(

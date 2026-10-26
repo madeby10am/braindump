@@ -399,7 +399,7 @@ struct MenuBarView: View {
                 }
                 Spacer(minLength: 8)
                 Toggle("", isOn: Binding(get: { model.voiceProcessing }, set: { model.setVoiceProcessing($0) }))
-                    .toggleStyle(.switch).labelsHidden().controlSize(.small)
+                    .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
             }
             if model.voiceProcessing {
                 DipLevelSlider(model: model).padding(.leading, 30)
@@ -421,6 +421,12 @@ struct MenuBarView: View {
                     Text(model.overlayPosition.title).font(.system(size: 11)).foregroundStyle(.secondary)
                     PositionGrid(selection: model.overlayPosition) { model.setOverlayPosition($0) }
                 }
+                HStack(spacing: 10) {
+                    Text("Colors").font(.system(size: 12)).foregroundStyle(.secondary).padding(.leading, 30)
+                    Spacer()
+                    Text(model.overlayTheme.title).font(.system(size: 11)).foregroundStyle(.secondary)
+                    ThemeSwatches(selection: model.overlayTheme) { model.setOverlayTheme($0) }
+                }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
@@ -428,10 +434,10 @@ struct MenuBarView: View {
 
     private var recordingOverlayHeader: some View {
         HStack(spacing: 10) {
-            RowIcon(name: "bolt.fill")
+            RowIcon(name: "waveform")
             VStack(alignment: .leading, spacing: 1) {
                 Text("Recording overlay").font(.system(size: 13, weight: .medium))
-                Text("Shows the brain on your screen while you talk. Pick where.")
+                Text("Shows a voice bar on your screen while you talk. Pick where and its colors.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -440,7 +446,7 @@ struct MenuBarView: View {
                 .controlSize(.small)
                 .help("Play the overlay once")
             Toggle("", isOn: Binding(get: { model.overlayEnabled }, set: { model.setOverlayEnabled($0) }))
-                .toggleStyle(.switch).labelsHidden().controlSize(.small)
+                .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
         }
     }
 
@@ -453,7 +459,7 @@ struct MenuBarView: View {
                 Text("AI formatting").font(.system(size: 13, weight: .medium))
                 Spacer(minLength: 8)
                 Toggle("", isOn: Binding(get: { model.enabled }, set: { model.enabled = $0; model.save() }))
-                    .toggleStyle(.switch).labelsHidden().controlSize(.small)
+                    .toggleStyle(.switch).tint(Theme.switchOn).labelsHidden().controlSize(.small)
             }
             if model.enabled {
                 HStack(spacing: 10) {
@@ -618,6 +624,29 @@ private struct SpeechTierRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
+    }
+}
+
+/// One dot per color scheme, each painted with its own colors; click to pick.
+private struct ThemeSwatches: View {
+    let selection: OverlayTheme
+    let choose: (OverlayTheme) -> Void
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(OverlayTheme.allCases) { theme in
+                Button { choose(theme) } label: {
+                    Circle()
+                        .fill(LinearGradient(colors: theme.colors, startPoint: .topLeading, endPoint: .bottomTrailing))
+                        .overlay(Circle().stroke(Color.primary.opacity(0.25), lineWidth: 0.5))
+                        .frame(width: 14, height: 14)
+                        .padding(2)
+                        .overlay(Circle().stroke(theme == selection ? Theme.accent : .clear, lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+                .help(theme.title)
+            }
+        }
     }
 }
 

@@ -61,9 +61,11 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         recorder.dipLevel = config.effectiveDipLevel
         let showOverlay = config.usesOverlay
         let overlayPosition = config.effectiveOverlayPosition
+        let overlayTheme = config.effectiveOverlayTheme
         DispatchQueue.main.async {
             self.overlay.isEnabled = showOverlay
             self.overlay.position = overlayPosition
+            self.overlay.theme = overlayTheme
         }
         recorder.preferredDeviceID = AudioDeviceManager.resolveConfiguredDeviceID(
             uid: config.audioInputDeviceUID,
@@ -213,6 +215,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         recorder.dipLevel = newConfig.effectiveDipLevel
         overlay.isEnabled = newConfig.usesOverlay
         overlay.position = newConfig.effectiveOverlayPosition
+        overlay.theme = newConfig.effectiveOverlayTheme
         recorder.preferredDeviceID = newDeviceID
         recorder.prepare()
         transcriber = makeTranscriber(for: config)
