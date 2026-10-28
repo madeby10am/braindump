@@ -269,15 +269,39 @@ public final class Formatter {
         return ok
     }
 
-    private func request(_ text: String, settings: FormatterConfig) -> String? {
+    /// Command Mode: rewrites `selection` as `instruction` says, or writes what it asks for when
+    /// nothing is highlighted. No faithfulness check here: changing the text is the point.
+    public func command(_ instruction: String, selection: String, settings: FormatterConfig) -> (text: String, seconds: Double)? {
+        let started = Date()
+        let user = selection.isEmpty
+            ? "<instruction>\n\(instruction)\n</instruction>"
+            : "<selected>\n\(selection)\n</selected>\n<instruction>\n\(instruction)\n</instruction>"
+        let messages = [
+            ["role": "system", "content": Formatter.commandPrompt],
+            ["role": "user", "content": user],
+        ]
+        // Writing from scratch ("draft an email about…") needs more room than a rewrite of a short selection.
+        guard let out = request(selection + instruction, settings: settings, messages: messages, minTokens: 1024), !out.isEmpty else { return nil }
+        return (out, Date().timeIntervalSince(started))
+    }
+
+    static let commandPrompt = """
+    You edit text inside a dictation app. The user highlighted some text (inside <selected> tags) and said an instruction (inside <instruction> tags), like "make this shorter", "fix the grammar", "translate to Spanish" or "turn this into bullet points". Apply the instruction to the selected text and output only the new text that will replace it. Keep its language, meaning and formatting unless the instruction says otherwise.
+
+    If there are no <selected> tags, nothing was highlighted: write what the instruction asks for.
+
+    Output only the resulting text. No preamble, no explanation, no quotes, no tags.
+    """
+
+    private func request(_ text: String, settings: FormatterConfig, messages: [[String: String]]? = nil, minTokens: Int = 256) -> String? {
         let port = settings.port ?? FormatterConfig.defaultPort
         guard let url = URL(string: "http://127.0.0.1:\(port)/v1/chat/completions") else { return nil }
 
         let body: [String: Any] = [
-            "messages": Formatter.messages(settings: settings, transcript: text),
+            "messages": messages ?? Formatter.messages(settings: settings, transcript: text),
             "temperature": 0.2,
             "top_p": 0.9,
-            "max_tokens": max(256, text.count),
+            "max_tokens": max(minTokens, text.count),
             "chat_template_kwargs": ["enable_thinking": false],
         ]
         guard let payload = try? JSONSerialization.data(withJSONObject: body) else { return nil }

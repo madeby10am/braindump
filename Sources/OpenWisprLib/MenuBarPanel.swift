@@ -21,6 +21,7 @@ final class MenuBarStatus: ObservableObject {
 struct MenuBarActions {
     var openSettings: () -> Void = {}
     var openHistory: () -> Void = {}
+    var openTab: (SettingsWindowController.Tab) -> Void = { _ in }
     var grantAccessibility: () -> Void = {}
     var reprocess: (URL) -> Void = { _ in }
     var previewOverlay: () -> Void = {}
@@ -200,7 +201,7 @@ private struct MenuHeightKey: PreferenceKey {
 }
 
 /// The sections that expand in place. Every setting is one of these: tap the row, pick from the list.
-enum MenuSection: String { case hotkey, formatting, swearing, speech, language, microphone, dipping, overlay, recordings }
+enum MenuSection: String { case hotkey, command, formatting, snippets, dictionary, swearing, speech, language, microphone, dipping, overlay, recordings }
 
 struct MenuBarView: View {
     @ObservedObject var model: SettingsModel
@@ -267,6 +268,10 @@ struct MenuBarView: View {
                 HStack(spacing: 5) {
                     Circle().fill(statusColor).frame(width: 7, height: 7)
                     Text(status.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    if model.wordsThisWeek > 0 {
+                        Text("· \(model.wordsThisWeek.formatted()) words this week · ~\(UsageStats.minutesSaved(words: model.wordsThisWeek)) min saved")
+                            .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                    }
                 }
             }
             Spacer()
@@ -290,8 +295,20 @@ struct MenuBarView: View {
             section(.hotkey, icon: "keyboard", title: "Hotkey", value: model.hotkeySummary) {
                 HotkeyPickerView(model: model, compact: true)
             }
-            section(.formatting, icon: "wand.and.stars", title: "AI formatting", value: model.enabled ? model.style.name : "Off") {
+            section(.command, icon: "command", title: "Command Mode", value: model.commandKey.title) {
+                commandChoices
+            }
+            section(.formatting, icon: "wand.and.stars", title: "AI formatting",
+                    value: model.enabled ? model.style.name + (model.styleByApp ? " · by app" : "") : "Off") {
                 formattingChoices
+            }
+            section(.snippets, icon: "text.badge.plus", title: "Snippets",
+                    value: model.snippets.isEmpty ? "None" : "\(model.snippets.count) saved") {
+                snippetList
+            }
+            section(.dictionary, icon: "character.book.closed", title: "Dictionary",
+                    value: model.vocabulary.isEmpty ? "None" : "\(model.vocabulary.count) words") {
+                dictionaryPreview
             }
             section(.swearing, icon: "asterisk", title: "Swear words", value: model.swearFilter.title) {
                 ForEach(SwearFilter.Mode.allCases) { mode in
@@ -386,6 +403,12 @@ struct MenuBarView: View {
                 }
             }
             if model.enabled {
+                ChoiceRow(title: "Switch style by app",
+                          detail: "Claude Prompt in Claude, Terminal and Cursor. Slack in Slack. Email in Mail.",
+                          selected: model.styleByApp) { model.setStyleByApp(!model.styleByApp) }
+                Button("Choose apps…") { actions.openTab(.apps) }
+                    .buttonStyle(.link).font(.system(size: 12))
+                    .padding(.horizontal, 10)
                 Text("Speed").font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 6)
                 ChoiceRow(title: "Faster", detail: "Quick, and great for everyday dictation.", selected: model.modelName == "fast") {
@@ -400,6 +423,59 @@ struct MenuBarView: View {
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 4)
             }
+        }
+    }
+
+    private static let commandDetails: [CommandKey: String] = [
+        .off: "Hold a key to rewrite highlighted text by voice.",
+        .rightcmd: "Hold the right ⌘ key.",
+        .rightctrl: "Hold the right ⌃ key.",
+        .rightshift: "Hold the right ⇧ key.",
+    ]
+
+    private var commandChoices: some View {
+        Group {
+            ForEach(CommandKey.allCases) { key in
+                ChoiceRow(title: key.title, detail: Self.commandDetails[key], selected: model.commandKey == key) { model.setCommandKey(key) }
+            }
+            Text("Highlight some text, hold the key and say what to do: \"make this shorter\", \"fix the grammar\", \"turn this into bullets\". Let go and it's rewritten. Nothing highlighted? It writes what you ask for. Uses AI formatting's model.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.top, 4)
+        }
+    }
+
+    private var snippetList: some View {
+        Group {
+            ForEach(model.snippets.filter { !$0.name.isEmpty }) { snippet in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\"\(snippet.name)\"").font(.system(size: 13, weight: .semibold))
+                    Text(snippet.text).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                }
+                .padding(.horizontal, 10).padding(.vertical, 5)
+            }
+            Text(model.snippets.isEmpty
+                 ? "Save text you use a lot, then paste it by saying its name."
+                 : "Say a name as the whole dictation to paste it.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .padding(.horizontal, 10).padding(.top, 2)
+            Button(model.snippets.isEmpty ? "Add a snippet…" : "Add or edit snippets…") { actions.openTab(.snippets) }
+                .buttonStyle(.link).font(.system(size: 12))
+                .padding(.horizontal, 10)
+        }
+    }
+
+    private var dictionaryPreview: some View {
+        Group {
+            Text(model.vocabulary.isEmpty
+                 ? "Names and words BrainDump should always spell your way."
+                 : model.vocabulary.joined(separator: ", "))
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10)
+            Button(model.vocabulary.isEmpty ? "Add words…" : "Edit words…") { actions.openTab(.dictionary) }
+                .buttonStyle(.link).font(.system(size: 12))
+                .padding(.horizontal, 10)
         }
     }
 

@@ -83,6 +83,24 @@ class TextInserter {
         }
     }
 
+    /// The text highlighted in the frontmost app, read by pressing ⌘C and putting the clipboard
+    /// back afterwards. Nil when nothing is highlighted (the clipboard didn't change).
+    func copySelection() -> String? {
+        let pasteboard = pasteboardProvider()
+        let savedItems = savePasteboard(pasteboard)
+        let before = pasteboard.changeCount
+        pasteAction(TextInserter.resolveKeyCode(for: "c") ?? 8)
+        var copied: String?
+        for _ in 0..<25 where copied == nil {
+            usleep(10_000)
+            if pasteboard.changeCount != before {
+                copied = NSPasteboard.general.string(forType: .string) ?? ""
+            }
+        }
+        if copied != nil { restorePasteboard(pasteboard, items: savedItems) }
+        return copied.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     private func savePasteboard(_ pasteboard: any TextInsertionPasteboard) -> [[(NSPasteboard.PasteboardType, Data)]] {
         guard let items = pasteboard.pasteboardItems else { return [] }
         return items.map { item in

@@ -36,6 +36,15 @@ public struct Config: Codable {
     /// Where the overlay appears: "top" (default), "center", "bottom-right", etc.
     public var overlayPosition: String?
     public var effectiveOverlayPosition: OverlayPosition { overlayPosition.flatMap(OverlayPosition.init(rawValue:)) ?? .top }
+    /// Switch formatting style by the app you're dictating into. On unless set.
+    public var styleByApp: FlexBool?
+    public var usesStyleByApp: Bool { styleByApp?.value ?? true }
+    /// Your per-app styles, bundle id -> style id ("default" = the style picked in the menu).
+    public var appStyles: [String: String]?
+    /// Command Mode key, held while you say what to do with the highlighted text:
+    /// "off" (default), "rightcmd", "rightctrl" or "rightshift".
+    public var commandKey: String?
+    public var effectiveCommandKey: CommandKey { commandKey.flatMap(CommandKey.init(rawValue:)) ?? .off }
     /// What happens to strong swear words in what gets pasted: "stars" (default, "f***"),
     /// "remove" or "off".
     public var swearFilter: String?
@@ -118,6 +127,9 @@ public struct Config: Codable {
         case overlayPosition
         case overlayTheme
         case swearFilter
+        case styleByApp
+        case appStyles
+        case commandKey
     }
 
     public init(from decoder: Decoder) throws {
@@ -150,6 +162,9 @@ public struct Config: Codable {
         self.overlayPosition = try c.decodeIfPresent(String.self, forKey: .overlayPosition)
         self.overlayTheme = try c.decodeIfPresent(String.self, forKey: .overlayTheme)
         self.swearFilter = try c.decodeIfPresent(String.self, forKey: .swearFilter)
+        self.styleByApp = try c.decodeIfPresent(FlexBool.self, forKey: .styleByApp)
+        self.appStyles = try c.decodeIfPresent([String: String].self, forKey: .appStyles)
+        self.commandKey = try c.decodeIfPresent(String.self, forKey: .commandKey)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -175,6 +190,9 @@ public struct Config: Codable {
         try c.encodeIfPresent(overlayPosition, forKey: .overlayPosition)
         try c.encodeIfPresent(overlayTheme, forKey: .overlayTheme)
         try c.encodeIfPresent(swearFilter, forKey: .swearFilter)
+        try c.encodeIfPresent(styleByApp, forKey: .styleByApp)
+        try c.encodeIfPresent(appStyles, forKey: .appStyles)
+        try c.encodeIfPresent(commandKey, forKey: .commandKey)
     }
 
     public init(

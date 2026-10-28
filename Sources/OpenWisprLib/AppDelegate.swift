@@ -14,6 +14,10 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     public var lastTranscription: String?
     public var lastRawTranscription: String?
     let overlay = RecordingOverlayController()
+    /// The app you were in when recording started, for its per-app style.
+    private var targetBundleID: String?
+    /// Set while a Command Mode recording runs: the highlighted text it will rewrite ("" for none).
+    private var commandSelection: String?
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         statusBar = StatusBarController()
@@ -155,23 +159,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startListening() {
-        for m in hotkeyManagers { m.stop() }
-        hotkeyManagers = []
-        for hk in config.hotkeys {
-            let manager = HotkeyManager(
-                keyCode: hk.keyCode,
-                modifiers: hk.modifierFlags
-            )
-            manager.start(
-                onKeyDown: { [weak self] in
-                    self?.handleKeyDown()
-                },
-                onKeyUp: { [weak self] in
-                    self?.handleKeyUp()
-                }
-            )
-            hotkeyManagers.append(manager)
-        }
+        installHotkeys()
 
         isReady = true
         statusBar.state = .idle
@@ -225,19 +213,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             Formatter.shared.start(settings: formatterSettings)
         }
 
-        for m in hotkeyManagers { m.stop() }
-        hotkeyManagers = []
-        for hk in config.hotkeys {
-            let manager = HotkeyManager(
-                keyCode: hk.keyCode,
-                modifiers: hk.modifierFlags
-            )
-            manager.start(
-                onKeyDown: { [weak self] in self?.handleKeyDown() },
-                onKeyUp: { [weak self] in self?.handleKeyUp() }
-            )
-            hotkeyManagers.append(manager)
-        }
+        installHotkeys()
 
         if !wasDownloading && !Transcriber.modelExists(modelSize: config.modelSize) {
             statusBar.state = .downloading
@@ -273,16 +249,35 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     /// Everything between Whisper and the clipboard: spoken punctuation, term spelling, then the
     /// AI formatter. When the formatter is off, skipped (short input) or fails, the rule-based
     /// tidy-up supplies capitals and full stops so the text is clean either way. The swear filter
-    /// runs last so it covers every path.
-    private func postProcess(_ raw: String) -> (spelled: String, text: String, seconds: Double?, settings: FormatterConfig) {
+    /// runs last so it covers every path. A spoken snippet name skips all of this and pastes the
+    /// snippet as saved; the app you're dictating into can pick the style.
+    private func postProcess(_ raw: String) -> (spelled: String, text: String, seconds: Double?, settings: FormatterConfig, label: String?) {
         let punctuated = (config.spokenPunctuation?.value ?? false) ? TextPostProcessor.process(raw) : raw
         let spelled = Vocabulary.apply(punctuated, custom: config.vocabulary ?? [])
-        let settings = config.formatterSettings
+        var settings = config.formatterSettings
+        if let snippet = SnippetStore.match(spelled) {
+            return (spelled, snippet.text, nil, settings, "Snippet: \(snippet.name)")
+        }
+        if config.usesStyleByApp, let style = AppStyles.style(for: targetBundleID, overrides: config.appStyles ?? [:]) {
+            settings.style = style
+        }
         // Fillers come out before the model sees the text: long rambles stay on track when thinned first.
         let formatted = Formatter.shared.formatWithInfo(BasicTidy.stripFillers(spelled), settings: settings)
         let tidied = formatted.seconds == nil ? BasicTidy.tidy(formatted.text) : formatted.text
         let text = SwearFilter.apply(tidied, mode: config.effectiveSwearFilter)
-        return (spelled, text, formatted.seconds, settings)
+        return (spelled, text, formatted.seconds, settings, formatted.seconds != nil ? settings.formatStyle.name : nil)
+    }
+
+    /// Command Mode: the spoken instruction applied to the highlighted text by the local model.
+    /// If the model can't run, nothing is pasted, so the highlighted text is left alone.
+    private func runCommand(_ raw: String, selection: String) -> (spelled: String, text: String, seconds: Double?, settings: FormatterConfig, label: String?) {
+        let instruction = Vocabulary.apply(raw, custom: config.vocabulary ?? []).trimmingCharacters(in: .whitespacesAndNewlines)
+        let settings = config.formatterSettings
+        guard !instruction.isEmpty, let result = Formatter.shared.command(instruction, selection: selection, settings: settings) else {
+            return (instruction, "", nil, settings, nil)
+        }
+        let text = SwearFilter.apply(result.text, mode: config.effectiveSwearFilter)
+        return (instruction, text, result.seconds, settings, "Command")
     }
 
     private func makeTranscriber(for config: Config) -> Transcriber {
@@ -293,6 +288,63 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
         )
         transcriber.spokenPunctuation = config.spokenPunctuation?.value ?? false
         return transcriber
+    }
+
+    /// The dictation hotkeys, plus the Command Mode key when one is set.
+    private func installHotkeys() {
+        for m in hotkeyManagers { m.stop() }
+        hotkeyManagers = []
+        for hk in config.hotkeys {
+            let manager = HotkeyManager(keyCode: hk.keyCode, modifiers: hk.modifierFlags)
+            manager.start(
+                onKeyDown: { [weak self] in self?.handleKeyDown() },
+                onKeyUp: { [weak self] in self?.handleKeyUp() }
+            )
+            hotkeyManagers.append(manager)
+        }
+        if let code = config.effectiveCommandKey.keyCode, !config.hotkeys.contains(where: { $0.keyCode == code }) {
+            let manager = HotkeyManager(keyCode: code)
+            manager.start(
+                onKeyDown: { [weak self] in self?.handleCommandKeyDown() },
+                onKeyUp: { [weak self] in self?.handleCommandKeyUp() }
+            )
+            hotkeyManagers.append(manager)
+        }
+    }
+
+    // MARK: - Command Mode
+
+    /// Hold to talk: copies whatever is highlighted, then records the instruction.
+    private func handleCommandKeyDown() {
+        guard isReady, case .idle = statusBar.state else { return }
+        guard config.formatterSettings.isEnabled else {
+            showError("Command Mode needs AI formatting turned on")
+            return
+        }
+        commandSelection = inserter.copySelection() ?? ""
+        if recordingLifecycle.keyDown(toggleMode: false) == .startRecording {
+            handleRecordingStart()
+        } else {
+            commandSelection = nil
+        }
+    }
+
+    private func handleCommandKeyUp() {
+        guard isReady, commandSelection != nil else { return }
+        if recordingLifecycle.keyUp(toggleMode: false) == .stopRecording {
+            handleRecordingStop()
+        }
+    }
+
+    private func showError(_ message: String) {
+        statusBar.state = .error(message)
+        statusBar.refresh()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+            if case .error = self.statusBar.state {
+                self.statusBar.state = .idle
+                self.statusBar.refresh()
+            }
+        }
     }
 
     private func handleKeyDown() {
@@ -321,6 +373,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleRecordingStart() {
+        targetBundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
         statusBar.state = .recording
         do {
             recorder.preferredDeviceID = AudioDeviceManager.resolveConfiguredDeviceID(
@@ -396,6 +449,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
 
         currentRecordingURL = nil
         statusBar.state = .transcribing
+        let command = commandSelection
+        commandSelection = nil
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
@@ -407,17 +462,18 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
             }
             do {
                 let raw = try self.transcriber.transcribe(audioURL: audioURL)
-                let processed = self.postProcess(raw)
+                let processed = command.map { self.runCommand(raw, selection: $0) } ?? self.postProcess(raw)
                 let punctuated = processed.spelled
                 let settings = processed.settings
                 let text = processed.text
                 if !text.isEmpty {
                     History.append(
                         raw: punctuated, output: text,
-                        style: processed.seconds != nil ? settings.formatStyle.name : nil,
+                        style: processed.label,
                         model: processed.seconds != nil ? settings.preset.label : nil,
                         seconds: processed.seconds
                     )
+                    UsageStats.record(punctuated)
                 }
                 if maxRecordings > 0 {
                     RecordingStore.prune(maxCount: maxRecordings)
@@ -520,7 +576,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate {
                 if !text.isEmpty {
                     History.append(
                         raw: punctuated, output: text,
-                        style: processed.seconds != nil ? settings.formatStyle.name : nil,
+                        style: processed.label,
                         model: processed.seconds != nil ? settings.preset.label : nil,
                         seconds: processed.seconds
                     )

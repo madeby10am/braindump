@@ -213,7 +213,7 @@ case "render-settings":
     _ = NSApplication.shared
     NSApp.setActivationPolicy(.accessory)
     SettingsWindowController.renderPNG(to: args.count > 2 ? args[2] : "settings.png", dark: args.contains("dark"),
-                                        tab: args.contains("history") ? .history : .formatting,
+                                        tab: args.compactMap(SettingsWindowController.Tab.init(rawValue:)).first ?? .formatting,
                                         hotkeyPicker: args.contains("hotkey"))
 case "render-overlay":
     _ = NSApplication.shared

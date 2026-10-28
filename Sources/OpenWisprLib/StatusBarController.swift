@@ -122,6 +122,10 @@ class StatusBarController: NSObject {
                 self?.panel?.hide(restoreFocus: false)
                 SettingsWindowController.shared.show(tab: .history)
             },
+            openTab: { [weak self] tab in
+                self?.panel?.hide(restoreFocus: false)
+                SettingsWindowController.shared.show(tab: tab)
+            },
             grantAccessibility: { [weak self] in
                 self?.panel?.hide(restoreFocus: false)
                 Permissions.openAccessibilitySettings()

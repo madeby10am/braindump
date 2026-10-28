@@ -11,7 +11,18 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var model: SettingsModel?
 
-    public enum Tab: String { case formatting, history }
+    public enum Tab: String, CaseIterable { case formatting, snippets, dictionary, apps, history
+
+        var title: String {
+            switch self {
+            case .formatting: return "Formatting"
+            case .snippets: return "Snippets"
+            case .dictionary: return "Dictionary"
+            case .apps: return "Apps"
+            case .history: return "History"
+            }
+        }
+    }
 
     public func show(tab: Tab? = nil) {
         DispatchQueue.main.async {
@@ -58,7 +69,7 @@ public final class SettingsWindowController: NSObject, NSWindowDelegate {
         model.tab = tab
         model.stopPolling()
         model.serverStatus = .ready
-        model.tryOutput = "I want you to do three things:\n\n1. Check my email.\n2. Add the dentist appointment to my calendar for Friday.\n3. Make me a grocery list: eggs, milk, and coffee."
+        model.tryOutput = "Go through my recipe app and do a full cleanup:\n\n1. The search is super slow, it takes 3 seconds to find anything. I think it's because it loads every recipe at once.\n2. Dark mode is broken on the settings page. The text is black on black.\n3. Add a favorites button on the recipe page itself, not the card.\n\nDon't touch the login stuff, it finally works.\n\n**When you're done:** send me a short list of what you changed and anything that's still broken."
         model.tryInfo = "1.2s · Fast — Gemma 4 E2B"
         let hosting: NSView
         let size: NSSize
@@ -164,6 +175,12 @@ final class SettingsModel: ObservableObject {
     @Published var overlayPosition: OverlayPosition = .top
     @Published var overlayTheme: OverlayTheme = .white
     @Published var swearFilter: SwearFilter.Mode = .stars
+    @Published var snippets: [Snippet] = []
+    @Published var vocabulary: [String] = []
+    @Published var styleByApp = true
+    @Published var appStyles: [String: String] = [:]
+    @Published var commandKey: CommandKey = .off
+    @Published var wordsThisWeek = 0
     @Published var language = "en"
     @Published var speechTier: SpeechTier? = .base
     /// A model from the config file that isn't one of the three sizes.
@@ -188,6 +205,7 @@ final class SettingsModel: ObservableObject {
             forName: History.didChange, object: nil, queue: .main
         ) { [weak self] _ in
             self?.history = History.load()
+            self?.wordsThisWeek = UsageStats.wordsThisWeek()
         }
     }
 
@@ -251,6 +269,68 @@ final class SettingsModel: ObservableObject {
         overlayPosition = position
         persist(config)
         DispatchQueue.main.async { (NSApp.delegate as? AppDelegate)?.overlay.preview(brief: true) }
+    }
+
+    // MARK: Snippets, dictionary, per-app styles, Command Mode
+
+    /// Adds an empty snippet and returns it, ready to fill in.
+    func addSnippet() -> Snippet {
+        let snippet = Snippet(name: "", text: "")
+        snippets.insert(snippet, at: 0)
+        SnippetStore.save(snippets)
+        return snippet
+    }
+
+    func updateSnippet(_ snippet: Snippet) {
+        guard let i = snippets.firstIndex(where: { $0.id == snippet.id }) else { return }
+        snippets[i] = snippet
+        SnippetStore.save(snippets)
+    }
+
+    func deleteSnippet(_ id: UUID) {
+        snippets.removeAll { $0.id == id }
+        SnippetStore.save(snippets)
+    }
+
+    func addWord(_ word: String) {
+        let word = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty, !vocabulary.contains(where: { $0.caseInsensitiveCompare(word) == .orderedSame }) else { return }
+        setVocabulary(vocabulary + [word])
+    }
+
+    func removeWord(_ word: String) {
+        setVocabulary(vocabulary.filter { $0 != word })
+    }
+
+    private func setVocabulary(_ words: [String]) {
+        var config = Config.load()
+        config.vocabulary = words.isEmpty ? nil : words
+        vocabulary = words
+        persist(config)
+    }
+
+    func setStyleByApp(_ on: Bool) {
+        var config = Config.load()
+        config.styleByApp = FlexBool(on)
+        styleByApp = on
+        persist(config)
+    }
+
+    /// Sets the style for an app; for an app you added, nil removes it.
+    func setAppStyle(_ bundleID: String, style: String?) {
+        var styles = appStyles
+        styles[bundleID] = style
+        var config = Config.load()
+        config.appStyles = styles.isEmpty ? nil : styles
+        appStyles = styles
+        persist(config)
+    }
+
+    func setCommandKey(_ key: CommandKey) {
+        var config = Config.load()
+        config.commandKey = key.rawValue
+        commandKey = key
+        persist(config)
     }
 
     func setSwearFilter(_ mode: SwearFilter.Mode) {
@@ -380,6 +460,12 @@ final class SettingsModel: ObservableObject {
         overlayPosition = config.effectiveOverlayPosition
         overlayTheme = config.effectiveOverlayTheme
         swearFilter = config.effectiveSwearFilter
+        snippets = SnippetStore.load()
+        vocabulary = config.vocabulary ?? []
+        styleByApp = config.usesStyleByApp
+        appStyles = config.appStyles ?? [:]
+        commandKey = config.effectiveCommandKey
+        wordsThisWeek = UsageStats.wordsThisWeek()
         language = config.language
         speechTier = SpeechTier.tier(for: config.modelSize)
         customSpeechModel = speechTier == nil ? config.modelSize : nil
@@ -535,6 +621,13 @@ struct SettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
+            Picker("", selection: $model.tab) {
+                ForEach(SettingsWindowController.Tab.allCases, id: \.self) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+            .padding(.bottom, 12)
             Divider().opacity(0.5)
             if model.tab == .formatting {
                 HStack(alignment: .top, spacing: 0) {
@@ -552,6 +645,12 @@ struct SettingsView: View {
                 }
                 Divider().opacity(0.5)
                 footer
+            } else if model.tab == .snippets {
+                SnippetsView(model: model)
+            } else if model.tab == .dictionary {
+                DictionaryView(model: model)
+            } else if model.tab == .apps {
+                AppStylesView(model: model)
             } else {
                 HistoryView(model: model)
             }
@@ -576,14 +675,6 @@ struct SettingsView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
-            Spacer()
-            Picker("", selection: $model.tab) {
-                Text("Formatting").tag(SettingsWindowController.Tab.formatting)
-                Text("History").tag(SettingsWindowController.Tab.history)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 190)
             Spacer()
             if DipLevel.isAvailable {
                 Button {
@@ -1052,7 +1143,7 @@ private struct MusicDippingPanel: View {
     }
 }
 
-private struct SectionTitle: View {
+struct SectionTitle: View {
     let title: String
     let subtitle: String
     var body: some View {
@@ -1140,7 +1231,7 @@ private struct StatusPill: View {
     }
 }
 
-private struct GradientButtonStyle: ButtonStyle {
+struct GradientButtonStyle: ButtonStyle {
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
